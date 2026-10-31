@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Test HLS Player</title>
+  <style>
+    body { background: #111; color: #eee; font-family: sans-serif; }
+    .player { position: relative; width: 640px; margin: 40px auto; }
+    video { width: 100%; background: #000; }
+    .play-button { position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; cursor: pointer; background: rgba(0,0,0,.45); font-size: 20px; }
+    .play-button.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="player">
+    <video id="v" controls muted></video>
+    <div class="play-button" id="play">▶ Lancer la lecture</div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script>
+    const src = "/hls/index.m3u8";
+    const video = document.getElementById("v");
+    let started = false;
+    function start() {
+      if (started) return;
+      started = true;
+      document.getElementById("play").classList.add("hidden");
+      if (window.Hls && Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(src);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+      } else {
+        video.src = src; video.play();
+      }
+    }
+    document.getElementById("play").addEventListener("click", start);
+  </script>
+</body>
+</html>

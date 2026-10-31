@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Pre-roll de test</title>
+<style>
+  .play-button { display: inline-block; padding: 12px 20px; background: #333; color: #fff; cursor: pointer; }
+  video { width: 480px; display: block; margin-top: 12px; background: #000; }
+</style></head>
+<body>
+  <div class="play-button" id="play">▶ Lecture</div>
+  <video id="v" muted></video>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+  <script>
+    document.getElementById('play').addEventListener('click', () => {
+      // 1) pub : petit manifest (5 s) chargé avant le contenu
+      fetch('/ad/index.m3u8').then(r => r.text()).then(() => {
+        // 2) contenu réel : manifest long
+        const video = document.getElementById('v');
+        if (window.Hls && Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource('/ep/index.m3u8');
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => video.play());
+        } else { video.src = '/ep/index.m3u8'; video.play(); }
+      });
+    });
+  </script>
+</body></html>

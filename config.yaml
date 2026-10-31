@@ -1,0 +1,68 @@
+# AnimeDL — configuration
+# Toutes les valeurs sont relatives au dossier du projet sauf chemins absolus.
+
+# Dossier de sortie des .mp4 (un sous-dossier par série sera créé)
+base_output: "C:/Users/Hinmaka/Downloads/AnimeDL"
+
+# Profil navigateur persistant (garde cookies / session / anti-bot)
+user_data_dir: ".browser-profile"
+
+# Le player exige un vrai navigateur pour générer le token du manifest
+headless: false
+
+# Temps max d'attente de la requête master.m3u8 après clic sur Play
+capture_timeout_s: 35
+
+# Boutons/tabs des serveurs, dans l'ordre de priorité (source 1 puis source 2).
+# Le script clique sur chacun pour déclencher un nouveau player.
+source_buttons:
+  - "Serveur 1"
+  - "Serveur 2"
+# Sélecteurs CSS des onglets serveurs (plus fiable que le texte). Ex:
+# source_selectors:
+#   - ".servers-tab:nth-child(1)"
+#   - ".servers-tab:nth-child(2)"
+source_selectors: []
+
+# Sélecteurs essayés pour lancer la lecture (dans l'ordre)
+play_selectors:
+  - ".play-button"
+  - ".vjs-big-play-button"
+  - "button[aria-label*='play' i]"
+  - ".jw-icon-playback"
+  - "video"
+
+# Popups/overlays à fermer avant de cliquer sur Play
+dismiss_selectors:
+  - "button[aria-label*='close' i]"
+  - ".modal .close"
+  - ".ads-close"
+
+# Regex de détection d'un lien d'épisode (appliquée au chemin de l'URL)
+episode_pattern: '-(\d+)-(vostfr|vf)/?$'
+
+# Préférer la VF quand les deux existent
+prefer_vf: false
+
+# Téléchargement
+fragment_concurrency: 4
+delay_between_episodes_s: 2
+min_duration_s: 30          # en-dessous => fichier considéré invalide
+min_size_mb: 1              # taille minimale d'un fichier valide
+max_sources: 2              # nombre de serveurs essayés (1, 2 puis abandon)
+
+# Qualité : "ask" (demande au 1er épisode), "best", "worst", ou une hauteur (ex: "720")
+quality: ask
+
+# Validation du manifest capté (filtre anti-pub)
+min_manifest_duration_s: 60  # une vidéo plus courte est considérée comme une pub
+allow_unknown_duration: false
+
+# Blocage publicitaire : hôtes supplémentaires à bloquer
+ad_hosts: []
+min_free_gb: 1              # pause si moins d'espace disque
+
+# Options yt-dlp (null = désactivé)
+ytdlp:
+  cookies_from_browser: null   # ex: "chrome" si le CDN exige les cookies de session
+  format: "best"
