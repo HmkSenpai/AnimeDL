@@ -6,6 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
+<center><img width="732" height="185" alt="image" src="https://github.com/user-attachments/assets/ce4c2b9e-800c-427e-ad42-0bfe1c44b8a4" /></center>
 
 AnimeDL pilote un vrai navigateur (Playwright) pour déclencher le player, capter
 l'URL signée du manifest HLS, puis laisse `yt-dlp` + `ffmpeg` produire un `.mp4`.
@@ -111,28 +112,9 @@ AnimeDL.bat            # Windows
 python app.py          # tous systèmes
 ```
 
-```
- █████╗ ███╗   ██╗██╗███╗   ███╗███████╗    ██████╗ ██╗
-██╔══██╗████╗  ██║██║████╗ ████║██╔════╝    ██╔══██╗██║
-███████║██╔██╗ ██║██║██╔████╔██║█████╗      ██║  ██║██║
-██╔══██║██║╚██╗██║██║██║╚██╔╝██║██╔══╝      ██║  ██║██║
-██║  ██║██║ ╚████║██║██║ ╚═╝ ██║███████╗    ██████╔╝███████╗
-╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚══════╝    ╚═════╝ ╚══════╝
 
-  Dossier de sortie : C:\Users\<vous>\Downloads\AnimeDL
-  Qualité par défaut: ask
-  Navigateur        : msedge (installé, sans téléchargement)
+<img width="740" height="696" alt="image" src="https://github.com/user-attachments/assets/0421ee1b-8a03-4fc1-b5b7-21e122f231b1" />
 
-  1) Télécharger une série (URL)
-  2) Tester une URL (lister les épisodes)
-  3) Modifier le dossier de sortie
-  4) Qualité par défaut
-  5) Serveurs à essayer
-  6) Navigateur
-  7) Affichage (fenêtre / masquée / headless)
-  8) Réinitialiser les préférences
-  0) Quitter
-```
 
 Les choix du menu sont enregistrés dans `user.yaml` (non versionné), qui
 **surcharge** `config.yaml` sans le modifier.
