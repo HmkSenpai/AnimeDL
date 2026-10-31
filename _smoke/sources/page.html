@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="fr">
+<head><meta charset="utf-8"><title>Sources multiples</title>
+<style>
+  body { font-family: sans-serif; margin: 40px; }
+  select { font-size: 16px; padding: 4px 8px; }
+  .play-button { margin-top: 20px; display: inline-block; padding: 12px 20px;
+                 background: #2d6cdf; color: #fff; cursor: pointer; }
+</style></head>
+<body>
+  <label>Serveur :
+    <select id="srv">
+      <option selected>LECTEUR myTV</option>
+      <option>LECTEUR MOON</option>
+      <option>LECTEUR VOE</option>
+      <option>LECTEUR Stape</option>
+    </select>
+  </label>
+  <div class="play-button" id="play">▶ Lecture</div>
+
+  <script>
+    const srv = document.getElementById('srv');
+    function start() {
+      const i = srv.selectedIndex;
+      fetch(`/src${i}/index.m3u8`).catch(() => {});
+    }
+    document.getElementById('play').addEventListener('click', start);
+    srv.addEventListener('change', start);
+  </script>
+</body></html>

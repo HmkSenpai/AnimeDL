@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Installer les dépendances
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Installer Chromium (avec dépendances système)
+        run: python -m playwright install --with-deps chromium
+
+      - name: Vérifier la compilation
+        run: python -m compileall -q adblock.py app.py capture.py common.py downloader.py hls.py main.py probe.py progress.py scraper.py
+
+      - name: Tests hors ligne
+        run: |
+          python _smoke/run_smoke.py
+          python _smoke/adfilter/run_adfilter.py
+          python _smoke/quality/run_quality.py
+          python _smoke/sources/run_sources.py
+          python _smoke/browsers/check.py

@@ -1,5 +1,6 @@
 .browser-profile/
-downloader/
+.venv/
+user.yaml
 logs/
 _smoke/hls/
 _smoke/out/
@@ -14,5 +15,17 @@ _smoke/quality/high/
 _smoke/quality/out/
 _smoke/quality/.profile/
 _smoke/quality/master.m3u8
+_smoke/sources/src3/
+_smoke/sources/.profile/
+_smoke/browsers/.profile/
 __pycache__/
 *.pyc
+.pytest_cache/
+.ruff_cache/
+.vscode/
+.idea/
+dist/
+build/
+*.spec
+.DS_Store
+Thumbs.db

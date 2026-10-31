@@ -1,65 +1,227 @@
-# AnimeDL — téléchargement automatique d'épisodes (HLS → MP4)
+# AnimeDL
 
-Pilote un vrai navigateur pour capter le manifest `master.m3u8` d'un épisode,
-puis `yt-dlp`/`ffmpeg` télécharge et assemble le `.mp4`. Boucle sur tous les
-épisodes, avec repli automatique sur le serveur 2 et reprise après interruption.
+**Télécharge une série entière depuis un player HLS : capture du `master.m3u8`, export MP4, reprise automatique.**
+
+[![CI](https://github.com/HmkSenpai/AnimeDL/actions/workflows/ci.yml/badge.svg)](https://github.com/HmkSenpai/AnimeDL/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
+
+AnimeDL pilote un vrai navigateur (Playwright) pour déclencher le player, capter
+l'URL signée du manifest HLS, puis laisse `yt-dlp` + `ffmpeg` produire un `.mp4`.
+Il parcourt la liste des épisodes, essaie automatiquement les différents serveurs,
+ignore les publicités et reprend là où il s'est arrêté.
+
+```
+page série ──► liste des épisodes ──► player (Playwright)
+                                            │
+                                  master.m3u8 signé (token frais)
+                                            │
+                                     validation HLS
+                                            │
+                                 yt-dlp + ffmpeg ──► S01E01.mp4
+```
+
+---
+
+## Sommaire
+
+- [Fonctionnalités](#fonctionnalités)
+- [Prérequis](#prérequis)
+- [Installation](#installation)
+- [Démarrage rapide](#démarrage-rapide)
+- [Ligne de commande](#ligne-de-commande)
+- [Configuration](#configuration)
+- [Serveurs multiples](#serveurs-multiples)
+- [Qualité vidéo](#qualité-vidéo)
+- [Publicités et validation du flux](#publicités-et-validation-du-flux)
+- [Affichage du navigateur](#affichage-du-navigateur)
+- [Fichiers produits](#fichiers-produits)
+- [Dépannage](#dépannage)
+- [Tests](#tests)
+- [Structure du projet](#structure-du-projet)
+- [Avertissement](#avertissement)
+- [Licence](#licence)
+
+---
+
+## Fonctionnalités
+
+- **Liste d'épisodes automatique** à partir d'une URL de série (ou d'épisode).
+- **Capture HLS réelle** : le token du manifest est régénéré pour chaque épisode,
+  donc pas de lien expiré.
+- **Serveurs illimités** : détection d'un `<select>` natif, d'onglets ou de boutons
+  (`LECTEUR myTV / MOON / VOE / Stape`, …) et bascule automatique en cas d'échec.
+- **Filtre anti-publicité** : blocage réseau, fermeture des popups, `window.open`
+  neutralisé, et rejet des manifests trop courts (pré-roll).
+- **Choix de la qualité** (SD / HD / FHD) demandé une seule fois, mémorisé pour la série.
+- **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
+  rejoue les échecs.
+- **Vérification du fichier final** : durée, taille, absence de `.part`.
+- **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
+- **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
+- **Aucun Chromium à télécharger** si Chrome / Edge / Brave est déjà présent.
+
+## Prérequis
+
+| Élément | Détail |
+|---|---|
+| Python | 3.11 ou plus récent |
+| Système | Windows 10/11, Linux ou macOS |
+| Navigateur | Chrome, Edge ou Brave installé — sinon Chromium Playwright |
+| Droits | aucun droit administrateur nécessaire |
 
 ## Installation
 
+### Windows (recommandé)
+
 ```powershell
-cd C:\Users\Hinmaka\anime-dl
-python -m pip install -r requirements.txt
+git clone https://github.com/HmkSenpai/AnimeDL.git
+cd AnimeDL
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+`setup.ps1` crée un environnement `.venv`, installe les dépendances et ne
+télécharge Chromium **que si aucun navigateur n'est déjà installé**.
+`AnimeDL.bat` détecte ensuite `.venv` automatiquement.
+
+### Linux / macOS
+
+```bash
+git clone https://github.com/HmkSenpai/AnimeDL.git
+cd AnimeDL
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# facultatif : seulement si aucun Chrome/Edge/Brave n'est installé
 python -m playwright install chromium
 ```
 
-`ffmpeg` est fourni par `imageio-ffmpeg` (aucune installation système requise).
+### Installation manuelle (tous systèmes)
 
-## Utilisation
-
-```powershell
-# 1. Vérifier la liste des épisodes (ne télécharge rien)
-python main.py "https://MON_SITE/anime/the-apothecary-diaries-3/" --dry-run
-
-# 2. Tester sur 2 épisodes
-python main.py "https://MON_SITE/anime/the-apothecary-diaries-3/" --limit 2
-
-# 3. Téléchargement complet (reprise automatique si relancé)
-python main.py "https://MON_SITE/anime/the-apothecary-diaries-3/"
-
-# Variantes utiles
-python main.py "<url>" --from-ep 7               # reprendre à l'épisode 7
-python main.py "<url>" --retry-failed            # rejouer les échecs
-python main.py "<url>" --sources "2,1"           # prioriser le serveur 2
-python main.py "<url>" --output "D:/Anime"       # autre dossier de sortie
+```bash
+pip install -r requirements.txt
+python -m playwright install chromium   # optionnel, voir ci-dessus
 ```
 
-Sortie : `C:\Users\Hinmaka\Downloads\AnimeDL\<Titre série>\<Titre> - S01E01.mp4`
-(le dossier est configurable via `base_output` dans `config.yaml`).
+## Démarrage rapide
 
-L'état est stocké dans `<dossier série>\.progress.json` : relancer la commande
-saute automatiquement les épisodes déjà terminés.
+```powershell
+AnimeDL.bat            # Windows
+python app.py          # tous systèmes
+```
 
-## Anti-pub et validation du flux
+```
+ █████╗ ███╗   ██╗██╗███╗   ███╗███████╗    ██████╗ ██╗
+██╔══██╗████╗  ██║██║████╗ ████║██╔════╝    ██╔══██╗██║
+███████║██╔██╗ ██║██║██╔████╔██║█████╗      ██║  ██║██║
+██╔══██║██║╚██╗██║██║██║╚██╔╝██║██╔══╝      ██║  ██║██║
+██║  ██║██║ ╚████║██║██║ ╚═╝ ██║███████╗    ██████╔╝███████╗
+╚═╝  ╚═╝╚═╝  ╚═══╝╚═╝╚═╝     ╚═╝╚══════╝    ╚═════╝ ╚══════╝
 
-- **Blocage réseau** des régies connues (`adblock.py`) + fermeture immédiate des
-  popups + `window.open` neutralisé au chargement de chaque page.
-- **Validation de chaque manifest capté** (`hls.py`) : requête HTTP avec les
-  cookies du navigateur, vérification `#EXTM3U` et **durée totale**. Tout
-  manifest plus court que `min_manifest_duration_s` (60 s par défaut) est
-  considéré comme une pub et ignoré → fini les `Did not get any data blocks`.
-- Si le site reste agressif, pilote Chrome ou **Brave** (boucliers intégrés) :
+  Dossier de sortie : C:\Users\<vous>\Downloads\AnimeDL
+  Qualité par défaut: ask
+  Navigateur        : msedge (installé, sans téléchargement)
 
-  ```powershell
-  python main.py "<url>" --browser brave
-  python main.py "<url>" --browser chrome
-  ```
+  1) Télécharger une série (URL)
+  2) Tester une URL (lister les épisodes)
+  3) Modifier le dossier de sortie
+  4) Qualité par défaut
+  5) Serveurs à essayer
+  6) Navigateur
+  7) Affichage (fenêtre / masquée / headless)
+  8) Réinitialiser les préférences
+  0) Quitter
+```
 
-  Le profil est alors celui de Brave/Chrome (session, cookies, extensions).
+Les choix du menu sont enregistrés dans `user.yaml` (non versionné), qui
+**surcharge** `config.yaml` sans le modifier.
 
-## Choix de la qualité (SD / HD / FHD)
+## Ligne de commande
 
-À la première capture, le script lit le `master.m3u8` et affiche les pistes
-disponibles :
+```bash
+python main.py "https://SITE/anime/ma-serie/"                 # tout télécharger
+python main.py "https://SITE/anime/ma-serie/" --dry-run       # lister seulement
+python main.py "https://SITE/anime/ma-serie/" --limit 2       # tester 2 épisodes
+```
+
+| Option | Description |
+|---|---|
+| `URL` | URL de la série **ou** d'un épisode (positionnel, optionnel avec le menu) |
+| `--output DOSSIER` | Remplace le dossier de sortie |
+| `--limit N` | Ne traite que N épisodes |
+| `--from-ep N` | Reprend à l'épisode N |
+| `--retry-failed` | Rejoue les épisodes marqués en échec |
+| `--dry-run` | Affiche la liste des épisodes sans rien télécharger |
+| `--sources "1,2,4"` | Force l'ordre/le choix des serveurs (1 = premier du menu) |
+| `--quality best\|worst\|720` | Qualité imposée pour toute la série |
+| `--browser auto\|chromium\|chrome\|brave\|msedge` | Navigateur piloté |
+| `--hidden` | Fenêtre réelle mais hors écran |
+| `--headless` | Navigateur invisible (souvent bloqué par les anti-bots) |
+| `--min-duration S` | Durée minimale d'un épisode valide (secondes) |
+| `--min-size-mb N` | Taille minimale d'un fichier valide (Mo) |
+| `--fresh-profile` | Repart d'un profil navigateur vierge (perte de session) |
+
+Exemples :
+
+```bash
+python main.py "<url>" --from-ep 7 --quality 1080
+python main.py "<url>" --sources "4,1,2" --hidden
+python main.py "<url>" --retry-failed
+```
+
+## Configuration
+
+`config.yaml` contient les réglages du projet ; `user.yaml` (créé par le menu)
+les surcharge. Les deux sont fusionnés au démarrage.
+
+| Clé | Défaut | Rôle |
+|---|---|---|
+| `base_output` | `~/Downloads/AnimeDL` | Dossier racine des séries (`~` accepté) |
+| `user_data_dir` | `.browser-profile` | Profil navigateur persistant (cookies, session) |
+| `headless` | `false` | Navigateur invisible |
+| `capture_timeout_s` | `35` | Attente du `master.m3u8` après le clic Play |
+| `source_buttons` | `[]` | Libellés d'onglets serveurs (si détection auto insuffisante) |
+| `source_selectors` | `[]` | Sélecteurs CSS des onglets serveurs |
+| `play_selectors` | liste | Sélecteurs CSS du bouton Play |
+| `dismiss_selectors` | liste | Boutons de fermeture des popups |
+| `episode_pattern` | `-(\d+)-(vostfr\|vf)/?$` | Regex des liens d'épisode (appliquée au chemin) |
+| `prefer_vf` | `false` | Prendre la VF quand elle existe |
+| `fragment_concurrency` | `4` | Fragments HLS téléchargés en parallèle |
+| `delay_between_episodes_s` | `2` | Pause entre deux épisodes |
+| `min_duration_s` | `30` | En dessous, le fichier est invalide |
+| `min_size_mb` | `1` | Taille minimale d'un fichier valide |
+| `max_sources` | `4` | Repli si aucun serveur n'est détecté sur la page |
+| `browser` | `auto` | `auto`, `chromium`, `chrome`, `brave`, `msedge` |
+| `display` | `window` | `window`, `hidden`, `headless` |
+| `sources` | `""` | `""` = tous, sinon `"1,2,4"` |
+| `quality` | `ask` | `ask`, `best`, `worst` ou une hauteur (`720`) |
+| `min_manifest_duration_s` | `60` | En dessous, le flux capté est considéré comme une pub |
+| `allow_unknown_duration` | `false` | Accepter un manifest sans durée lisible |
+| `ad_hosts` | `[]` | Domaines publicitaires supplémentaires à bloquer |
+| `min_free_gb` | `1` | Pause si l'espace disque restant est inférieur |
+| `ytdlp.cookies_from_browser` | `null` | ex. `chrome` si le CDN exige les cookies de session |
+| `ytdlp.format` | `best` | Format yt-dlp |
+
+## Serveurs multiples
+
+Aucun nombre de serveurs n'est codé en dur :
+
+1. AnimeDL inspecte chaque frame de la page.
+2. Un `<select>` contenant des options `lecteur/serveur/source/player/mirror`
+   est prioritaire : **toutes ses options** sont essayées dans l'ordre.
+3. Sinon, les onglets et boutons correspondants sont cliqués successivement
+   (ouverture du menu déroulant si nécessaire).
+4. Dès qu'un manifest valide est trouvé, il est utilisé. Si le téléchargement
+   échoue, le serveur suivant est essayé.
+
+```bash
+python main.py "<url>" --sources "4,1,2"   # ordre imposé
+```
+
+## Qualité vidéo
+
+À la première capture, les variantes du `master.m3u8` sont listées :
 
 ```
 Qualités disponibles pour cet épisode :
@@ -69,67 +231,100 @@ Qualités disponibles pour cet épisode :
 Choix [1-3, Entrée = 1] :
 ```
 
-Le choix est appliqué à **tous les épisodes** et mémorisé dans
-`.progress.json` (les relances le conservent). Pour le fixer sans interaction :
+Le choix s'applique à **tous les épisodes** et est mémorisé dans `.progress.json`.
+Sans terminal interactif, la meilleure qualité est utilisée.
 
-```powershell
-python main.py "<url>" --quality 720     # 720p max
-python main.py "<url>" --quality worst   # la plus légère
-python main.py "<url>" --quality best    # la meilleure (défaut)
-```
+## Publicités et validation du flux
 
-`quality: ask` dans `config.yaml` reproduit le comportement interactif.
+- blocage réseau des régies connues et des `ad_hosts` ;
+- fermeture des popups ouverts au clic sur Play ;
+- `window.open` neutralisé au chargement de chaque page et de chaque frame ;
+- **validation de chaque manifest capté** : requête HTTP avec les cookies du
+  navigateur, contrôle de `#EXTM3U`, des segments et de la **durée totale**.
+  Un flux plus court que `min_manifest_duration_s` est ignoré (pub pré-roll).
 
-## Si le player ne démarre pas (diagnostic)
+C'est ce mécanisme qui évite les classiques `Did not get any data blocks` de
+yt-dlp sur un manifest publicitaire.
 
-```powershell
-python probe.py "https://MON_SITE/anime/serie/serie-01-vostfr/"
-```
+## Affichage du navigateur
 
-Le probe liste les iframes, les `<video>`, les boutons Play et les onglets
-serveurs, clique sur les candidats un par un, et affiche tout ce que le réseau
-émet. Il écrit aussi `logs/probe-<date>.json` + `logs/probe-<date>.png`.
+La capture nécessite un vrai navigateur : le site génère le lien `master.m3u8`
+en JavaScript, avec un token lié à la session et au User-Agent.
 
-Quand une capture échoue, `main.py` dépose automatiquement
-`logs/fail-<épisode>-<date>.json` et un screenshot — c'est ce qu'il faut
-regarder (ou m'envoyer) pour ajuster `config.yaml`.
+| Mode | Réglage | Comportement |
+|---|---|---|
+| `window` | défaut | fenêtre visible |
+| `hidden` | `display: hidden` / `--hidden` | vraie fenêtre placée hors écran (recommandé) |
+| `headless` | `display: headless` / `--headless` | invisible, souvent bloqué |
 
-## Réglage si le site change
+Une fois la capture faite, le téléchargement n'utilise plus le navigateur.
 
-Tout est dans `config.yaml` :
-
-| Clé | Rôle |
-|---|---|
-| `source_buttons` | Libellés exacts des onglets serveurs, dans l'ordre de repli |
-| `source_selectors` | Sélecteurs CSS des onglets serveurs (prioritaires sur le texte) |
-| `play_selectors` | Sélecteurs CSS du bouton Play |
-| `dismiss_selectors` | Boutons de fermeture des popups/publicités |
-| `episode_pattern` | Regex des liens d'épisodes (appliquée au chemin de l'URL) |
-| `capture_timeout_s` | Temps d'attente du `master.m3u8` après le clic Play |
-| `prefer_vf` | `true` pour prendre la VF quand elle existe |
-| `min_manifest_duration_s` | En-dessous, le flux capté est vu comme une pub (60 s) |
-| `allow_unknown_duration` | Accepter un manifest sans durée lisible (désactivé) |
-| `max_sources` | Nombre de serveurs tentés avant abandon |
-| `quality` | `ask`, `best`, `worst` ou une hauteur (`720`) |
-| `ad_hosts` | Domaines pub supplémentaires à bloquer |
-| `ytdlp.cookies_from_browser` | ex. `chrome` si le CDN exige les cookies de session |
-
-## Architecture
+## Fichiers produits
 
 ```
-main.py        orchestrateur CLI (boucle, repli serveurs, reprise)
-scraper.py     liste des épisodes depuis la page série
-capture.py     Playwright : clic Play + interception du master.m3u8 (token frais)
-downloader.py  yt-dlp + vérification ffmpeg (durée, taille, .part)
-progress.py    état .progress.json
-common.py      config, logs UTF-8, ffmpeg, espace disque
+<base_output>/<Titre série>/
+├── <Titre> - S01E01.mp4
+├── <Titre> - S01E02.mp4
+└── .progress.json        # épisodes terminés, échecs, qualité choisie
 ```
 
-## Test de fumée (hors ligne)
+En cas d'échec, `logs/` contient `fail-<épisode>-<date>.json` et un screenshot.
+`probe.py` y dépose ses propres rapports.
 
-```powershell
-python _smoke\run_smoke.py
+## Dépannage
+
+Guide détaillé : [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+```bash
+python probe.py "https://SITE/anime/ma-serie/ma-serie-01-vostfr/"
 ```
 
-Génère un flux HLS local, le sert, le capture avec Playwright, le télécharge et
-vérifie le fichier : valide toute la chaîne sans toucher au site réel.
+`probe.py` liste les iframes, `<video>`, boutons Play et onglets serveurs,
+clique sur les candidats et journalise tout le trafic réseau. C'est l'outil à
+lancer en premier si un site change.
+
+## Tests
+
+Tests hors ligne : ils génèrent des flux HLS locaux et valident toute la chaîne
+sans toucher à un site réel.
+
+```bash
+python _smoke/run_smoke.py                 # capture -> mp4
+python _smoke/adfilter/run_adfilter.py     # pub pré-roll ignorée
+python _smoke/quality/run_quality.py       # variantes SD/HD/FHD
+python _smoke/sources/run_sources.py       # 4 serveurs, bascule automatique
+python _smoke/browsers/check.py            # navigateurs déjà installés
+```
+
+La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.
+
+## Structure du projet
+
+```
+AnimeDL.bat        lanceur Windows du menu
+app.py             menu interactif
+main.py            orchestrateur (CLI, boucle, serveurs, reprise)
+scraper.py         extraction de la liste des épisodes
+capture.py         Playwright : Play, serveurs, interception du manifest
+hls.py             validation du manifest et extraction des variantes
+adblock.py         blocage publicitaire et neutralisation des popups
+downloader.py      yt-dlp + vérification ffmpeg
+progress.py        état .progress.json
+common.py          configuration, logs UTF-8, ffmpeg, navigateurs, disque
+probe.py           diagnostic du player
+setup.ps1          installation Windows (venv + dépendances)
+```
+
+Détails d'architecture : [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Avertissement
+
+Cet outil est fourni à des fins personnelles et éducatives. Il ne contient aucun
+contenu protégé et n'héberge aucun flux. Vous êtes responsable de l'usage que
+vous en faites et devez respecter les conditions d'utilisation des sites
+concernés ainsi que la législation de votre pays. Les auteurs déclinent toute
+responsabilité quant à une utilisation abusive.
+
+## Licence
+
+[MIT](LICENSE) © AnimeDL contributors

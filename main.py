@@ -5,6 +5,7 @@ Usage :
     python main.py "https://MonSite/anime/xxx/xxx-05-vostfr/" --limit 3
     python main.py "<url>" --dry-run        # liste les épisodes seulement
     python main.py "<url>" --retry-failed   # rejoue les épisodes en échec
+    python main.py                          # menu interactif (si lancé sans URL)
 """
 from __future__ import annotations
 
@@ -12,40 +13,50 @@ import argparse
 import re
 import sys
 import time
-from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 from adblock import AdBlocker
 from capture import ManifestCapture
-from common import die, ensure_space, ffmpeg_exe, load_config, log, resolve_path, safe_filename
+from common import (
+    die,
+    ensure_space,
+    ffmpeg_exe,
+    browser_launch_options,
+    load_config,
+    log,
+    resolve_browser,
+    resolve_path,
+    safe_filename,
+)
 from downloader import DownloadError, cleanup_failed, download, verify
 from progress import Progress
 from scraper import collect_episodes
 
 
-def parse_args() -> argparse.Namespace:
+def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Téléchargement automatique d'épisodes HLS")
-    p.add_argument("url", help="URL de la série ou d'un épisode")
+    p.add_argument("url", nargs="?", default="", help="URL de la série ou d'un épisode")
     p.add_argument("--output", help="Dossier de sortie (remplace base_output)")
     p.add_argument("--limit", type=int, default=0, help="Ne traiter que N épisodes")
     p.add_argument("--from-ep", type=int, default=0, help="Commencer à cet épisode")
     p.add_argument("--retry-failed", action="store_true", help="Rejouer les épisodes en échec")
     p.add_argument("--dry-run", action="store_true", help="Lister les épisodes sans télécharger")
-    p.add_argument("--sources", default="", help="Ordre des serveurs, ex: \"1,2\"")
+    p.add_argument("--sources", default="", help="Serveurs à essayer, ex: \"1,2,4\" (défaut: tous)")
     p.add_argument("--headless", action="store_true", help="Navigateur invisible (souvent bloqué)")
+    p.add_argument("--hidden", action="store_true", help="Fenêtre hors écran (recommandé si visible gêne)")
     p.add_argument("--min-duration", type=float, help="Durée minimale acceptée (s)")
     p.add_argument("--min-size-mb", type=float, help="Taille minimale acceptée (Mo)")
     p.add_argument("--fresh-profile", action="store_true", help="Ignorer le profil navigateur existant")
-    p.add_argument("--browser", default="chromium",
-                   choices=["chromium", "chrome", "brave", "msedge"],
-                   help="Navigateur à piloter (chrome/brave = meilleur anti-pub)")
+    p.add_argument("--browser", default="",
+                   choices=["", "auto", "chromium", "chrome", "brave", "msedge"],
+                   help="Navigateur à piloter (auto = navigateur déjà installé)")
     p.add_argument("--quality", default="",
                    help="Qualité: best, worst, ou une hauteur en p (720). Choisie une fois pour tous les épisodes.")
-    return p.parse_args()
+    return p
 
 
-def choose_quality(cap, args, cfg: dict, progress: "Progress") -> str:
+def choose_quality(cap, args, cfg: dict, progress: Progress) -> str:
     """Détermine la qualité à utiliser et la mémorise pour les épisodes suivants."""
     if args.quality:
         return args.quality
@@ -91,11 +102,12 @@ def choose_quality(cap, args, cfg: dict, progress: "Progress") -> str:
     return "best"
 
 
-def main() -> int:
-    args = parse_args()
+def run(args: argparse.Namespace) -> int:
     cfg = load_config()
-    if args.headless:
+    display = str(cfg.get("display") or "window").lower()
+    if args.headless or display == "headless":
         cfg["headless"] = True
+    hidden = args.hidden or display == "hidden"
     if args.output:
         cfg["base_output"] = args.output
     if args.min_duration is not None:
@@ -113,6 +125,13 @@ def main() -> int:
 
     sources_order = [int(x) - 1 for x in re.findall(r"\d+", args.sources)] or None
 
+    requested = args.browser or str(cfg.get("browser") or "auto")
+    browser = resolve_browser(requested)
+    if browser == "chromium":
+        log("[navigateur] chromium embarqué (Playwright)")
+    else:
+        log(f"[navigateur] {browser} déjà installé — aucun téléchargement")
+
     with sync_playwright() as pw:
         launch_kwargs: dict = {
             "headless": bool(cfg["headless"]),
@@ -120,9 +139,20 @@ def main() -> int:
             "args": ["--disable-blink-features=AutomationControlled"],
             "ignore_default_args": ["--enable-automation"],
         }
-        if args.browser != "chromium":
-            launch_kwargs["channel"] = args.browser
-        ctx = pw.chromium.launch_persistent_context(str(user_data), **launch_kwargs)
+        if hidden:
+            # fenêtre réelle (moins détectable) mais placée hors écran
+            launch_kwargs["args"] += ["--window-position=-32000,-32000", "--start-minimized"]
+
+        try:
+            channel_kwargs = dict(launch_kwargs)
+            channel_kwargs.update(browser_launch_options(browser))
+            ctx = pw.chromium.launch_persistent_context(str(user_data), **channel_kwargs)
+        except Exception as exc:
+            if browser == "chromium":
+                raise
+            log(f"[navigateur] échec avec {browser} ({type(exc).__name__}) — repli sur chromium")
+            browser = "chromium"
+            ctx = pw.chromium.launch_persistent_context(str(user_data), **launch_kwargs)
         ctx.set_default_timeout(30_000)
 
         capturer = ManifestCapture(ctx, cfg)
@@ -168,40 +198,53 @@ def main() -> int:
             ok = False
             last_error = "inconnu"
 
-            attempts = sources_order or list(range(max(1, int(cfg.get("max_sources", 2)))))
-            for source_index in attempts:
+            order = list(sources_order) if sources_order else [0]
+            pos = 0
+            while pos < len(order):
+                source_index = order[pos]
                 log(f"\n--- Source #{source_index + 1} ---")
                 cap = capturer.capture(ep.url, source_index, tag=f"E{ep.code}")
-                if not cap:
+
+                # découverte dynamique : autant de serveurs que le site en propose
+                if not sources_order:
+                    detected = capturer.source_count()
+                    if detected <= 0:
+                        detected = int(cfg.get("max_sources", 2))
+                    for extra in range(1, max(detected, 1)):
+                        if extra not in order:
+                            order.append(extra)
+
+                if cap:
+                    if quality is None:
+                        quality = choose_quality(cap, args, cfg, progress)
+                    try:
+                        final, duration = download(
+                            cap.url,
+                            cap.referer,
+                            cap.user_agent,
+                            out_template,
+                            cfg,
+                            label=f"E{ep.code}",
+                            cookie=cap.cookie,
+                            fallback_url=cap.variant_url,
+                            quality=quality,
+                        )
+                        verify(final, duration, cfg, expected=cap.duration)
+                        progress.mark_done(ep.code, final, source_index)
+                        results.append((ep.code, str(final)))
+                        ok = True
+                        break
+                    except DownloadError as exc:
+                        last_error = str(exc)
+                        log(f"[dl] échec source #{source_index + 1} : {exc}")
+                        cleanup_failed(out_template)
+                    except Exception as exc:  # erreur yt-dlp / réseau
+                        last_error = f"{type(exc).__name__}: {exc}"
+                        log(f"[dl] erreur source #{source_index + 1} : {last_error}")
+                        cleanup_failed(out_template)
+                else:
                     last_error = f"aucun manifest (source {source_index + 1})"
-                    continue
-                if quality is None:
-                    quality = choose_quality(cap, args, cfg, progress)
-                try:
-                    final, duration = download(
-                        cap.url,
-                        cap.referer,
-                        cap.user_agent,
-                        out_template,
-                        cfg,
-                        label=f"E{ep.code}",
-                        cookie=cap.cookie,
-                        fallback_url=cap.variant_url,
-                        quality=quality,
-                    )
-                    verify(final, duration, cfg, expected=cap.duration)
-                    progress.mark_done(ep.code, final, source_index)
-                    results.append((ep.code, str(final)))
-                    ok = True
-                    break
-                except DownloadError as exc:
-                    last_error = str(exc)
-                    log(f"[dl] échec source #{source_index + 1} : {exc}")
-                    cleanup_failed(out_template)
-                except Exception as exc:  # erreur yt-dlp / réseau
-                    last_error = f"{type(exc).__name__}: {exc}"
-                    log(f"[dl] erreur source #{source_index + 1} : {last_error}")
-                    cleanup_failed(out_template)
+                pos += 1
 
             if not ok:
                 failures += 1
@@ -222,6 +265,15 @@ def main() -> int:
     if failures:
         log("  Relance avec --retry-failed pour rejouer les épisodes en échec.")
     return 0 if not failures else 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.url:
+        parser.print_help()
+        return 2
+    return run(args)
 
 
 if __name__ == "__main__":

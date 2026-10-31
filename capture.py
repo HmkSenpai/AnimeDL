@@ -60,18 +60,28 @@ JS_MARK_PLAYER = """() => {
   return out;
 }"""
 
-JS_MARK_SOURCES = """() => {
-  const rx = /(serveur|server|source|lecteur|player|h[ée]bergeur|host|mirror)/i;
-  const out = [];
+JS_DETECT_SOURCES = """() => {
+  const rx = /(lecteur|serveur|server|source|player|mirror|h[ée]bergeur|streamtape|voe|moon|mytv)/i;
+  const out = {selects: [], tabs: []};
+
+  document.querySelectorAll('select').forEach((sel, si) => {
+    const options = [...sel.options].map(o => (o.textContent || '').trim());
+    if (!options.some(t => rx.test(t))) return;
+    sel.setAttribute('data-adl-select', String(si));
+    out.selects.push({marker: si, options, selected: sel.selectedIndex});
+  });
+
+  const seen = new Set();
   for (const el of document.querySelectorAll('button,[role=button],a,li,div,span')) {
     const txt = (el.textContent || '').trim();
-    if (txt.length > 60) continue;
-    const sig = txt + ' ' + String(el.className) + ' ' + (el.id || '');
-    if (!rx.test(sig)) continue;
+    if (!txt || txt.length > 40) continue;
+    if (!rx.test(txt)) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 6 || r.height < 6) continue;
-    el.setAttribute('data-adl-source', String(out.length));
-    out.push(txt.slice(0, 40));
+    if (seen.has(txt)) continue;
+    seen.add(txt);
+    el.setAttribute('data-adl-tab', String(out.tabs.length));
+    out.tabs.push(txt);
   }
   return out;
 }"""
@@ -116,6 +126,10 @@ class ManifestCapture:
         self._requests: list[str] = []
         self._ua = ""
         self._source_index = 0
+        self._episode_url: str | None = None
+        self.sources: list[str] = []
+        self._select_handle: tuple[Frame, int] | None = None
+        self._tabs_frame: Frame | None = None
 
     # ------------------------------------------------------------------ utils
     def _is_ad_url(self, url: str) -> bool:
@@ -287,53 +301,97 @@ class ManifestCapture:
             except Exception:
                 continue
 
-    def _click_source_button(self, index: int) -> None:
-        """index 1 => 2e serveur (le premier est déjà actif par défaut)."""
-        assert self.page is not None
-        labels = self.cfg.get("source_buttons", [])
-        wanted = labels[index - 1] if 0 <= index - 1 < len(labels) else None
-        log(f"[capture] recherche du serveur #{index + 1}" + (f" ({wanted})" if wanted else ""))
+    # ------------------------------------------------------------ serveurs
+    def detect_sources(self) -> list[str]:
+        """Détecte tous les serveurs proposés (native <select> ou onglets)."""
+        self.sources = []
+        self._select_handle = None
+        self._tabs_frame = None
+        for frame in self._frames():
+            try:
+                data = frame.evaluate(JS_DETECT_SOURCES)
+            except Exception:
+                continue
+            selects = data.get("selects") or []
+            if selects:
+                chosen = max(selects, key=lambda s: len(s.get("options") or []))
+                self.sources = [str(o) for o in chosen.get("options") or []]
+                self._select_handle = (frame, int(chosen.get("marker", 0)))
+                log(f"[serveurs] {len(self.sources)} détecté(s) : {self.sources}")
+                return self.sources
+            tabs = data.get("tabs") or []
+            if len(tabs) > 1:
+                self.sources = [str(t) for t in tabs]
+                self._tabs_frame = frame
+                log(f"[serveurs] {len(self.sources)} onglet(s) : {self.sources}")
+                return self.sources
+        return self.sources
 
+    def source_count(self) -> int:
+        return len(self.sources)
+
+    def _select_source(self, index: int) -> bool:
+        """index 0 = premier serveur (déjà actif), index >= 1 = bascule."""
+        assert self.page is not None
+        if index <= 0:
+            return True
+
+        # 1) <select> natif : sélection par position
+        if self._select_handle:
+            frame, marker = self._select_handle
+            try:
+                el = frame.query_selector(f"select[data-adl-select='{marker}']")
+                if el:
+                    el.select_option(index=index)
+                    label = self.sources[index] if index < len(self.sources) else str(index)
+                    log(f"[serveurs] sélection : {label}")
+                    return True
+            except Exception as exc:
+                log(f"[serveurs] select impossible ({exc})")
+
+        # 2) onglets / menu déroulant custom
+        if self._tabs_frame:
+            frame = self._tabs_frame
+            try:
+                els = frame.query_selector_all("[data-adl-tab]")
+                if els and index < len(els):
+                    if not els[index].is_visible() and els:
+                        els[0].click(timeout=1500, force=True)
+                        self.page.wait_for_timeout(700)
+                        els = frame.query_selector_all("[data-adl-tab]")
+                    if index < len(els):
+                        els[index].click(timeout=2500, force=True)
+                        log(f"[serveurs] onglet cliqué : {self.sources[index]}")
+                        return True
+            except Exception:
+                pass
+
+        # 3) libellés / sélecteurs du config
+        labels = self.cfg.get("source_buttons", [])
+        wanted = labels[index] if index < len(labels) else None
         if wanted:
             for frame in self._frames():
                 try:
                     loc = frame.get_by_text(wanted, exact=False)
                     if loc.count():
                         loc.first.click(timeout=3000)
-                        log(f"[capture] serveur sélectionné : {wanted}")
-                        return
+                        log(f"[serveurs] sélection config : {wanted}")
+                        return True
                 except Exception:
                     continue
 
         for selector in self.cfg.get("source_selectors", []):
             try:
-                loc = self.page.locator(selector).nth(index - 1)
+                loc = self.page.locator(selector).nth(index)
                 if loc.count():
                     loc.click(timeout=3000)
-                    log(f"[capture] serveur sélectionné ({selector})")
-                    return
+                    log(f"[serveurs] sélection ({selector})")
+                    return True
             except Exception:
                 continue
 
-        for frame in self._frames():
-            try:
-                texts = frame.evaluate(JS_MARK_SOURCES)
-            except Exception:
-                continue
-            if not texts:
-                continue
-            if index < len(texts):
-                try:
-                    for el in frame.query_selector_all(f"[data-adl-source='{index}']"):
-                        if el.is_visible():
-                            el.click(timeout=3000, force=True)
-                            log(f"[capture] serveur sélectionné (heuristique: {texts[index]})")
-                            return
-                except Exception:
-                    continue
-            log(f"[capture] serveurs détectés : {texts}")
-
-        log("[capture] aucun onglet serveur trouvé — bascule ignorée")
+        log(f"[serveurs] bascule #{index + 1} impossible")
+        return False
 
     # -------------------------------------------------------- validation HLS
     def _evaluate_candidates(self) -> CaptureResult | None:
@@ -417,6 +475,14 @@ class ManifestCapture:
             self.page.on("request", self._on_request)
         return self.page
 
+    def _same_page(self, url: str) -> bool:
+        """Compare les URLs en ignorant slash final et query (redirections du site)."""
+
+        def norm(value: str) -> str:
+            return urlparse(value).path.rstrip("/").lower()
+
+        return bool(self.page and self.page.url) and norm(self.page.url) == norm(url)
+
     def capture(self, episode_url: str, source_index: int = 0, tag: str = "") -> CaptureResult | None:
         timeout_s = int(self.cfg.get("capture_timeout_s", 35))
         self._seen = []
@@ -426,7 +492,7 @@ class ManifestCapture:
 
         self.ensure_page()
 
-        if source_index == 0 or not self.page.url:
+        if not self._same_page(episode_url):
             log(f"[capture] navigation -> {episode_url}")
             try:
                 self.page.goto(episode_url, wait_until="domcontentloaded", timeout=60_000)
@@ -439,10 +505,15 @@ class ManifestCapture:
             except Exception:
                 pass
             self.page.wait_for_timeout(2500)
+            self._episode_url = episode_url
+            self.detect_sources()
+            if source_index > 0:
+                self._select_source(source_index)
+                self.page.wait_for_timeout(2500)
         else:
             log(f"[capture] bascule vers le serveur #{source_index + 1}")
-            self._click_source_button(source_index)
-            self.page.wait_for_timeout(2000)
+            self._select_source(source_index)
+            self.page.wait_for_timeout(2500)
 
         try:
             self._ua = self.page.evaluate("() => navigator.userAgent")

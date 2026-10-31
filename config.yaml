@@ -2,7 +2,8 @@
 # Toutes les valeurs sont relatives au dossier du projet sauf chemins absolus.
 
 # Dossier de sortie des .mp4 (un sous-dossier par série sera créé)
-base_output: "C:/Users/Hinmaka/Downloads/AnimeDL"
+# "~" = dossier utilisateur ; relatif = depuis le dossier du projet
+base_output: "~/Downloads/AnimeDL"
 
 # Profil navigateur persistant (garde cookies / session / anti-bot)
 user_data_dir: ".browser-profile"
@@ -13,11 +14,12 @@ headless: false
 # Temps max d'attente de la requête master.m3u8 après clic sur Play
 capture_timeout_s: 35
 
-# Boutons/tabs des serveurs, dans l'ordre de priorité (source 1 puis source 2).
-# Le script clique sur chacun pour déclencher un nouveau player.
-source_buttons:
-  - "Serveur 1"
-  - "Serveur 2"
+# Boutons/tabs des serveurs. Vide = détection automatique (select natif,
+# onglets, boutons). À remplir seulement si le site est exotique, ex:
+# source_buttons:
+#   - "LECTEUR myTV"
+#   - "LECTEUR MOON"
+source_buttons: []
 # Sélecteurs CSS des onglets serveurs (plus fiable que le texte). Ex:
 # source_selectors:
 #   - ".servers-tab:nth-child(1)"
@@ -49,7 +51,17 @@ fragment_concurrency: 4
 delay_between_episodes_s: 2
 min_duration_s: 30          # en-dessous => fichier considéré invalide
 min_size_mb: 1              # taille minimale d'un fichier valide
-max_sources: 2              # nombre de serveurs essayés (1, 2 puis abandon)
+max_sources: 4              # repli si aucun serveur n'est détecté sur la page
+
+# Navigateur piloté : auto (réutilise Chrome/Edge/Brave installé), chromium
+# (embarqué Playwright), chrome, brave, msedge
+browser: auto
+
+# Affichage : window (visible), hidden (hors écran), headless (invisible, souvent bloqué)
+display: window
+
+# Serveurs à essayer : "" = auto (tous ceux détectés), sinon "1,2,4"
+sources: ""
 
 # Qualité : "ask" (demande au 1er épisode), "best", "worst", ou une hauteur (ex: "720")
 quality: ask
