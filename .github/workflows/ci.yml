@@ -45,3 +45,4 @@ jobs:
           python _smoke/quality/run_quality.py
           python _smoke/sources/run_sources.py
           python _smoke/browsers/check.py
+          python _smoke/menu/run_argv.py

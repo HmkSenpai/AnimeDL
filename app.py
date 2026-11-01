@@ -1,6 +1,7 @@
 """AnimeDL — menu interactif (lancer : python app.py ou AnimeDL.bat)."""
 from __future__ import annotations
 
+import shlex
 import sys
 
 from common import USER_PREFS_PATH, load_config, log, resolve_browser, save_user_prefs
@@ -42,21 +43,70 @@ def show_settings(cfg: dict) -> None:
     log(f"  Préférences       : {USER_PREFS_PATH.name if USER_PREFS_PATH.exists() else 'aucune'}")
 
 
-def run_download(url: str, dry_run: bool = False) -> None:
-    cfg = load_config()
-    parser = build_parser()
-    argv = [url]
-    if dry_run:
+def split_input(raw: str) -> list[str]:
+    """Découpe une saisie « URL + options » collée d'un seul bloc.
+
+    Accepte les guillemets (Windows les laisse souvent collés) et préserve les
+    antislashs des chemins (D:\\Anime). Ex:
+        https://site/anime/x/ --from-ep 5   ->  ['https://site/anime/x/', '--from-ep', '5']
+    """
+    text = (raw or "").strip()
+    if not text:
+        return []
+    try:
+        parts = shlex.split(text, posix=False)
+    except ValueError:
+        parts = text.split()
+
+    tokens: list[str] = []
+    for part in parts:
+        if len(part) >= 2 and part[0] == part[-1] and part[0] in "\"'":
+            part = part[1:-1]
+        if part:
+            tokens.append(part)
+    return tokens
+
+
+def build_argv(raw: str, cfg: dict, dry_run: bool = False) -> list[str]:
+    """Construit la ligne de commande finale à partir de la saisie et du menu."""
+    argv = split_input(raw)
+    if not argv:
+        return []
+
+    flags = {token.split("=", 1)[0] for token in argv if token.startswith("--")}
+
+    if dry_run and "--dry-run" not in flags:
         argv.append("--dry-run")
+
     sources = str(cfg.get("sources") or "").strip()
-    if sources:
+    if sources and "--sources" not in flags:
         argv += ["--sources", sources]
+
     display = str(cfg.get("display") or "window").lower()
-    if display == "hidden":
+    if display == "hidden" and "--hidden" not in flags and "--headless" not in flags:
         argv.append("--hidden")
-    elif display == "headless":
+    elif display == "headless" and "--headless" not in flags and "--hidden" not in flags:
         argv.append("--headless")
-    args = parser.parse_args(argv)
+
+    return argv
+
+
+def run_download(raw: str, dry_run: bool = False) -> None:
+    cfg = load_config()
+    argv = build_argv(raw, cfg, dry_run)
+    if not argv:
+        log("  Aucune URL fournie.")
+        return
+    parser = build_parser()
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit:
+        log("  Options invalides — exemple correct : https://SITE/anime/serie/ --from-ep 5")
+        return
+    if not args.url:
+        log("  URL manquante — exemple : https://SITE/anime/ma-serie/ --from-ep 5")
+        return
+    log(f"  Options retenues : {' '.join(argv[1:]) or 'aucune'}")
     run(args)
 
 
@@ -66,7 +116,7 @@ def main() -> int:
         print(BANNER)
         show_settings(cfg)
         print(
-            "\n  1) Télécharger une série (URL)\n"
+            "\n  1) Télécharger une série (URL + options)\n"
             "  2) Tester une URL (lister les épisodes)\n"
             "  3) Modifier le dossier de sortie\n"
             "  4) Qualité par défaut\n"
@@ -83,7 +133,8 @@ def main() -> int:
             return 0
 
         if choice == "1":
-            url = ask("  URL de la série ou d'un épisode")
+            log("  Colle l'URL, puis les options si besoin : --from-ep 5 --quality 720 --limit 2")
+            url = ask("  URL (+ options)")
             if not url:
                 log("  URL vide, retour au menu.")
                 continue

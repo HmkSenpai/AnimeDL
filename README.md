@@ -137,6 +137,16 @@ python app.py          # tous systèmes
 Les choix du menu sont enregistrés dans `user.yaml` (non versionné), qui
 **surcharge** `config.yaml` sans le modifier.
 
+Dans l'option 1, tu peux coller l'URL **et ses options sur la même ligne** :
+
+```
+  URL (+ options) : https://SITE/anime/ma-serie/ --from-ep 5 --quality 720 --limit 2
+  Options retenues : --from-ep 5 --quality 720 --limit 2
+```
+
+Les guillemets autour de l'URL sont acceptés (et retirés), ainsi que les
+chemins Windows (`--output "D:\Anime"`).
+
 ## Ligne de commande
 
 ```bash
@@ -294,6 +304,7 @@ python _smoke/adfilter/run_adfilter.py     # pub pré-roll ignorée
 python _smoke/quality/run_quality.py       # variantes SD/HD/FHD
 python _smoke/sources/run_sources.py       # 4 serveurs, bascule automatique
 python _smoke/browsers/check.py            # navigateurs déjà installés
+python _smoke/menu/run_argv.py             # saisie « URL + options » du menu
 ```
 
 La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.
