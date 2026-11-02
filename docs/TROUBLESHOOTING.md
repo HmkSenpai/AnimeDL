@@ -24,6 +24,7 @@ En cas d'échec de capture, `main.py` produit de son côté
 | popups à répétition | régie non listée | ajouter ses domaines dans `ad_hosts`, ou utiliser Brave |
 | page « Checking your browser » | protection anti-bot | mode `hidden` plutôt que `headless`, ou navigateur réel (`--browser chrome`) |
 | qualité toujours la même | choix mémorisé | supprimer `.progress.json` du dossier série, ou `--quality 1080` |
+| **É02 contient É01** (image identique, autre qualité) | le player n'a pas changé d'épisode, ou la page a redirigé | le script refuse désormais ce cas (`stream_identity_check`) ; lancer `probe.py` sur É02 et vérifier que l'iframe change bien de `src` |
 | `espace disque insuffisant` | `min_free_gb` atteint | libérer de l'espace ou changer `base_output` |
 | `ffmpeg introuvable` | installation incomplète | `pip install imageio-ffmpeg` |
 

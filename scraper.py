@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from urllib.parse import urljoin, urlparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from playwright.sync_api import Page
 
@@ -20,6 +20,25 @@ class Episode:
     @property
     def code(self) -> str:
         return f"{self.number:02d}"
+
+
+_TRACKING_KEYS = ("utm_", "fbclid", "gclid", "yclid", "mc_cid", "mc_eid", "referrer", "ref")
+
+
+def clean_href(href: str) -> str:
+    """URL absolue sans fragment ni paramètres de tracking.
+
+    La query est conservée : certains sites changent d'épisode uniquement par un
+    paramètre (`?ep=2`). La supprimer faisait pointer tous les épisodes vers le
+    même player.
+    """
+    parsed = urlparse(href)
+    pairs = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if not any(key.lower() == t or key.lower().startswith(t) for t in _TRACKING_KEYS)
+    ]
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", urlencode(pairs), ""))
 
 
 def series_url_from(url: str, pattern: re.Pattern[str]) -> str:
@@ -91,7 +110,7 @@ def collect_episodes(
             continue
         number = int(m.group(1))
         lang = (m.group(2) or "vostfr").lower()
-        clean = f"{urlparse(href).scheme}://{urlparse(href).netloc}{path}"
+        clean = clean_href(href)
         found[(number, lang)] = Episode(number, clean, lang, text or clean)
 
     if not found:

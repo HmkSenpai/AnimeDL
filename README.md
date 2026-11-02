@@ -58,6 +58,8 @@ page série ──► liste des épisodes ──► player (Playwright)
 - **Choix de la qualité** (SD / HD / FHD) demandé une seule fois, mémorisé pour la série.
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
   rejoue les échecs.
+- **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique au
+  précédent (player bloqué), au lieu d'enregistrer deux fois la même vidéo.
 - **Vérification du fichier final** : durée, taille, absence de `.part`.
 - **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
 - **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
@@ -190,6 +192,7 @@ les surcharge. Les deux sont fusionnés au démarrage.
 | `quality` | `ask` | `ask`, `best`, `worst` ou une hauteur (`720`) |
 | `min_manifest_duration_s` | `60` | En dessous, le flux capté est considéré comme une pub |
 | `allow_unknown_duration` | `false` | Accepter un manifest sans durée lisible |
+| `stream_identity_check` | `true` | Refuser un épisode dont le flux est identique au précédent |
 | `ad_hosts` | `[]` | Domaines publicitaires supplémentaires à bloquer |
 | `min_free_gb` | `1` | Pause si l'espace disque restant est inférieur |
 | `ytdlp.cookies_from_browser` | `null` | ex. `chrome` si le CDN exige les cookies de session |
@@ -287,6 +290,7 @@ python _smoke/quality/run_quality.py       # variantes SD/HD/FHD
 python _smoke/sources/run_sources.py       # 4 serveurs, bascule automatique
 python _smoke/browsers/check.py            # navigateurs déjà installés
 python _smoke/menu/run_argv.py             # saisie « URL + options » du menu
+python _smoke/episodes/run_identity.py     # un épisode = un flux différent
 ```
 
 La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.

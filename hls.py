@@ -42,6 +42,16 @@ class ManifestInfo:
     variant_url: str | None
     vod: bool
     variants: list[Variant] = field(default_factory=list)
+    segment: str | None = None
+
+
+def _first_segment(base_url: str, text: str) -> str | None:
+    """Première URI de segment d'une media playlist (sert d'empreinte de contenu)."""
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            return urljoin(base_url, line)
+    return None
 
 
 def _sum_durations(text: str) -> float:
@@ -95,7 +105,13 @@ def inspect(url: str, headers: dict[str, str], timeout: int = 15) -> ManifestInf
             return ManifestInfo(url, None, best.url, vod, variants)
         if not vresp.ok or "#EXTM3U" not in vresp.text[:50]:
             return ManifestInfo(url, None, best.url, vod, variants)
-        return ManifestInfo(url, _sum_durations(vresp.text), best.url,
-                            "#EXT-X-ENDLIST" in vresp.text, variants)
+        return ManifestInfo(
+            url,
+            _sum_durations(vresp.text),
+            best.url,
+            "#EXT-X-ENDLIST" in vresp.text,
+            variants,
+            _first_segment(best.url, vresp.text),
+        )
 
-    return ManifestInfo(url, _sum_durations(text), None, vod, [])
+    return ManifestInfo(url, _sum_durations(text), None, vod, [], _first_segment(url, text))

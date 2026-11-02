@@ -66,6 +66,22 @@ yt-dlp ré-estime la taille totale à chaque fragment HLS, ce qui fait « recule
 une barre classique. `downloader.py` fige le total au premier `dltotal > 0`
 (`frozen_total`) et calcule l'avancement par différence de `downloaded_bytes`.
 
+### Un épisode = un flux
+
+Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau nom :
+
+1. **Identité de page** — `_canonical()` compare chemin **et query** : un site
+   qui change d'épisode via `?ep=2` déclenche bien une navigation (avant, la
+   query était ignorée, donc `_loaded_episode` restait inchangé).
+2. **Identité de flux** — chaque manifest capté reçoit une empreinte
+   (`premier segment + durée`). Si l'empreinte d'un épisode est déjà celle d'un
+   autre, `main.py` refuse le téléchargement (`stream_identity_check`) et essaie
+   le serveur suivant. Cela couvre le cas d'un player bloqué sur l'épisode
+   précédent, qui joue la même vidéo dans une autre qualité.
+3. **Vérification d'atterrissage** — après navigation, si l'URL finale désigne
+   un autre numéro d'épisode (redirection), la capture est annulée au lieu de
+   télécharger la mauvaise page.
+
 ### Profil persistant
 
 `.browser-profile` conserve cookies, session et éventuel challenge anti-bot.

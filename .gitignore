@@ -18,6 +18,8 @@ _smoke/quality/master.m3u8
 _smoke/sources/src3/
 _smoke/sources/.profile/
 _smoke/browsers/.profile/
+_smoke/episodes/.media/
+_smoke/episodes/.profile/
 __pycache__/
 *.pyc
 .pytest_cache/

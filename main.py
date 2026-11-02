@@ -186,6 +186,9 @@ def run(args: argparse.Namespace) -> int:
         results: list[tuple[str, str]] = []
         failures = 0
         quality: str | None = None
+        # empreinte du flux -> épisode : détecte un player resté sur l'épisode précédent
+        streams: dict[str, str] = {}
+        identity_check = bool(cfg.get("stream_identity_check", True))
 
         for ep in episodes:
             if progress.is_done(ep.code):
@@ -214,7 +217,16 @@ def run(args: argparse.Namespace) -> int:
                         if extra not in order:
                             order.append(extra)
 
-                if cap:
+                duplicate = None
+                if cap and cap.fingerprint and identity_check:
+                    other = streams.get(cap.fingerprint)
+                    if other and other != ep.code:
+                        duplicate = other
+
+                if cap and duplicate:
+                    log(f"[!] E{ep.code} : flux identique à E{duplicate} — le player n'a pas changé d'épisode")
+                    last_error = f"flux identique à E{duplicate}"
+                elif cap:
                     if quality is None:
                         quality = choose_quality(cap, args, cfg, progress)
                     try:
@@ -232,6 +244,8 @@ def run(args: argparse.Namespace) -> int:
                         verify(final, duration, cfg, expected=cap.duration)
                         progress.mark_done(ep.code, final, source_index)
                         results.append((ep.code, str(final)))
+                        if cap.fingerprint:
+                            streams[cap.fingerprint] = ep.code
                         ok = True
                         break
                     except DownloadError as exc:
@@ -250,6 +264,9 @@ def run(args: argparse.Namespace) -> int:
                 failures += 1
                 progress.mark_failed(ep.code, last_error)
                 log(f"[!] E{ep.code} abandonné ({last_error})")
+                if last_error.startswith("flux identique"):
+                    log("    Le player rejoue une autre vidéo : vérifie la page avec probe.py, "
+                        "ou désactive stream_identity_check si c'est un faux positif.")
 
             time.sleep(float(cfg["delay_between_episodes_s"]))
 

@@ -70,6 +70,10 @@ quality: ask
 min_manifest_duration_s: 60  # une vidéo plus courte est considérée comme une pub
 allow_unknown_duration: false
 
+# Refuser un épisode dont le flux est identique au précédent (player bloqué).
+# Mettre false si un site réutilise volontairement le même chemin + durée.
+stream_identity_check: true
+
 # Blocage publicitaire : hôtes supplémentaires à bloquer
 ad_hosts: []
 min_free_gb: 1              # pause si moins d'espace disque

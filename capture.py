@@ -8,6 +8,7 @@ jamais télécharger la vidéo publicitaire.
 from __future__ import annotations
 
 import json
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,6 +109,7 @@ class CaptureResult:
     duration: float | None = None
     duration_unknown: bool = False
     variants: list[Variant] = field(default_factory=list)
+    fingerprint: str = ""
 
 
 @dataclass
@@ -126,8 +128,14 @@ class ManifestCapture:
         self._requests: list[str] = []
         self._ua = ""
         self._source_index = 0
-        self._episode_url: str | None = None
+        self._loaded_episode: str | None = None
         self.sources: list[str] = []
+        try:
+            self._pattern: re.Pattern[str] | None = re.compile(
+                str(cfg.get("episode_pattern") or r"-(\d+)-(?:vostfr|vf)/?$")
+            )
+        except re.error:
+            self._pattern = None
         self._select_handle: tuple[Frame, int] | None = None
         self._tabs_frame: Frame | None = None
 
@@ -394,6 +402,26 @@ class ManifestCapture:
         return False
 
     # -------------------------------------------------------- validation HLS
+    def _fingerprint(self, info: hls.ManifestInfo) -> str:
+        """Empreinte du contenu : premier segment (ou manifest) + durée.
+
+        Deux épisodes différents ne doivent pas produire la même empreinte :
+        c'est ce qui détecte un player resté bloqué sur l'épisode précédent.
+        """
+        raw = info.segment or info.variant_url or info.url
+        return f"{urlparse(raw).path}|{round(info.duration or 0)}"
+
+    def _episode_number(self, url: str) -> int | None:
+        if not self._pattern:
+            return None
+        match = self._pattern.search(urlparse(url).path)
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except (IndexError, TypeError, ValueError):
+            return None
+
     def _evaluate_candidates(self) -> CaptureResult | None:
         """Valide les nouveaux manifests ; renvoie le premier qui ressemble à l'épisode."""
         min_dur = float(self.cfg.get("min_manifest_duration_s", 60))
@@ -423,6 +451,7 @@ class ManifestCapture:
                 duration=info.duration,
                 duration_unknown=info.duration is None,
                 variants=info.variants,
+                fingerprint=self._fingerprint(info),
             )
             if info.duration is None:
                 # pas de #EXTINF lisible : accepté seulement si autorisé
@@ -475,13 +504,38 @@ class ManifestCapture:
             self.page.on("request", self._on_request)
         return self.page
 
-    def _same_page(self, url: str) -> bool:
-        """Compare les URLs en ignorant slash final et query (redirections du site)."""
+    @staticmethod
+    def _canonical(url: str) -> str:
+        """Identité d'une page : chemin + query triée.
 
-        def norm(value: str) -> str:
-            return urlparse(value).path.rstrip("/").lower()
+        Certains sites changent d'épisode via un paramètre (`?ep=2`) : comparer
+        uniquement le chemin ferait croire qu'on est déjà sur la bonne page.
+        """
+        parsed = urlparse(url)
+        query = "&".join(sorted(part for part in parsed.query.split("&") if part))
+        return f"{parsed.path.rstrip('/').lower()}?{query.lower()}"
 
-        return bool(self.page and self.page.url) and norm(self.page.url) == norm(url)
+    def _same_episode_loaded(self, url: str) -> bool:
+        return self._loaded_episode is not None and self._loaded_episode == self._canonical(url)
+
+    def _check_landing_page(self, requested: str, tag: str) -> bool:
+        """Vérifie que la page affichée est bien l'épisode demandé (pas de redirection)."""
+        assert self.page is not None
+        final = self.page.url or ""
+        if not final or self._canonical(final) == self._canonical(requested):
+            return True
+
+        log(f"[capture] page finale différente : {final[:120]}")
+        want, got = self._episode_number(requested), self._episode_number(final)
+        if want is not None and got is not None and want != got:
+            log(f"[capture] E{want:02d} demandé mais E{got:02d} affiché — capture annulée")
+            self._dump_report(tag)
+            return False
+        if want is not None and got is None:
+            log("[capture] la page a quitté la fiche épisode — capture annulée")
+            self._dump_report(tag)
+            return False
+        return True
 
     def capture(self, episode_url: str, source_index: int = 0, tag: str = "") -> CaptureResult | None:
         timeout_s = int(self.cfg.get("capture_timeout_s", 35))
@@ -492,7 +546,7 @@ class ManifestCapture:
 
         self.ensure_page()
 
-        if not self._same_page(episode_url):
+        if not self._same_episode_loaded(episode_url):
             log(f"[capture] navigation -> {episode_url}")
             try:
                 self.page.goto(episode_url, wait_until="domcontentloaded", timeout=60_000)
@@ -505,7 +559,10 @@ class ManifestCapture:
             except Exception:
                 pass
             self.page.wait_for_timeout(2500)
-            self._episode_url = episode_url
+            if not self._check_landing_page(episode_url, tag):
+                self._loaded_episode = None
+                return None
+            self._loaded_episode = self._canonical(episode_url)
             self.detect_sources()
             if source_index > 0:
                 self._select_source(source_index)
@@ -555,3 +612,4 @@ class ManifestCapture:
         except Exception:
             pass
         self.page = None
+        self._loaded_episode = None
