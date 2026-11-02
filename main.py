@@ -41,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--limit", type=int, default=0, help="Ne traiter que N épisodes")
     p.add_argument("--from-ep", type=int, default=0, help="Commencer à cet épisode")
     p.add_argument("--retry-failed", action="store_true", help="Rejouer les épisodes en échec")
+    p.add_argument("--redo", type=int, action="append", default=[], metavar="N",
+                   help="Refaire un épisode déjà terminé (répétable), ex: --redo 2")
     p.add_argument("--dry-run", action="store_true", help="Lister les épisodes sans télécharger")
     p.add_argument("--sources", default="", help="Serveurs à essayer, ex: \"1,2,4\" (défaut: tous)")
     p.add_argument("--headless", action="store_true", help="Navigateur invisible (souvent bloqué)")
@@ -182,6 +184,14 @@ def run(args: argparse.Namespace) -> int:
         progress = Progress(title, out_dir / ".progress.json")
         if args.retry_failed:
             progress.clear_failed()
+        for number in args.redo or []:
+            code = f"{int(number):02d}"
+            old = progress.forget(code)
+            if old and old.exists():
+                old.unlink()
+                log(f"[redo] E{code} : ancien fichier supprimé ({old.name})")
+            else:
+                log(f"[redo] E{code} : remis dans la file")
 
         results: list[tuple[str, str]] = []
         failures = 0

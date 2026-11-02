@@ -146,6 +146,7 @@ python main.py "https://SITE/anime/ma-serie/" --limit 2       # tester 2 épisod
 | `--limit N` | Ne traite que N épisodes |
 | `--from-ep N` | Reprend à l'épisode N |
 | `--retry-failed` | Rejoue les épisodes marqués en échec |
+| `--redo N` | Refaire l'épisode N (supprime le fichier et l'état), répétable |
 | `--dry-run` | Affiche la liste des épisodes sans rien télécharger |
 | `--sources "1,2,4"` | Force l'ordre/le choix des serveurs (1 = premier du menu) |
 | `--quality best\|worst\|720` | Qualité imposée pour toute la série |
@@ -162,6 +163,7 @@ Exemples :
 python main.py "<url>" --from-ep 7 --quality 1080
 python main.py "<url>" --sources "4,1,2" --hidden
 python main.py "<url>" --retry-failed
+python main.py "<url>" --redo 2 --redo 5     # refaire E02 et E05
 ```
 
 ## Configuration

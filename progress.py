@@ -46,6 +46,14 @@ class Progress:
             self.data["episodes"].pop(code, None)
         self.save()
 
+    def forget(self, code: str) -> Path | None:
+        """Retire un épisode de l'état et renvoie son fichier enregistré (à supprimer)."""
+        entry = self.data["episodes"].pop(code, None)
+        self.save()
+        if entry and entry.get("file"):
+            return Path(str(entry["file"]))
+        return None
+
     def save(self) -> None:
         dump_json(self.path, self.data)
 

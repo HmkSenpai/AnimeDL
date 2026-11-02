@@ -111,7 +111,7 @@ def _download_once(
         "fragment_retries": 5,
         "socket_timeout": 30,
         "continuedl": True,
-        "overwrites": False,
+        "overwrites": True,
         "noprogress": True,
         "quiet": True,
         "no_warnings": True,
