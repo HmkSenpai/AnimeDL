@@ -15,8 +15,9 @@ BANNER = r"""
 ░    ░ ░  ·░ ░   ∙░ ░   ░ ░ .  ░ ░   ∙░ ░   ░ ░   ░ ░    ░▄▄▄▄▄▄      ░       ·. ░ ░    ░▄▄▄▄▄▄
 █ .  █ █   █ █ ∙  █ █   █ █    █ █ ∙  █ █   █ █   █ █    .    ·█      █   .      █ █    .    ·█
 █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█      █▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█  
-                       téléchargement automatique d'épisodes  ·  v1.1
+                  téléchargement automatique d'épisodes  ·  v1.1 by Hinmaka
 """
+
 
 
 def ask(prompt: str, default: str = "") -> str:

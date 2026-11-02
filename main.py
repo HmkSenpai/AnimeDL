@@ -202,7 +202,7 @@ def run(args: argparse.Namespace) -> int:
 
         for ep in episodes:
             if progress.is_done(ep.code):
-                log(f"\n=== E{ep.code} — déjà téléchargé, on saute ===")
+                log(f"\n=== E{ep.code} — déjà téléchargé, skiper ===")
                 continue
 
             log(f"\n=== E{ep.code} [{ep.lang}] {ep.url} ===")
