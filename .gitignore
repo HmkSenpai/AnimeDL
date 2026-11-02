@@ -20,6 +20,8 @@ _smoke/sources/.profile/
 _smoke/browsers/.profile/
 _smoke/episodes/.media/
 _smoke/episodes/.profile/
+_smoke/master/.media/
+_smoke/master/.profile/
 __pycache__/
 *.pyc
 .pytest_cache/

@@ -5,15 +5,17 @@ import glob
 import os
 import re
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 import yt_dlp
 
-from common import ffmpeg_exe, log
+from common import end_status, ffmpeg_exe, log, status_line
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
+_RESOLUTION_RE = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
 
 
 class DownloadError(RuntimeError):
@@ -35,9 +37,45 @@ def probe_duration(path: Path, ffmpeg: str) -> float | None:
     return int(h) * 3600 + int(mi) * 60 + float(s)
 
 
+def probe_resolution(path: Path, ffmpeg: str) -> tuple[int | None, int | None]:
+    """Résolution réelle du fichier (largeur, hauteur)."""
+    proc = subprocess.run(
+        [ffmpeg, "-hide_banner", "-i", str(path)],
+        capture_output=True,
+        text=True,
+        errors="ignore",
+    )
+    m = _RESOLUTION_RE.search(proc.stderr or "")
+    if not m:
+        return None, None
+    return int(m.group(1)), int(m.group(2))
+
+
+def requested_height(quality: str | None) -> int | None:
+    m = re.match(r"(\d{3,4})", str(quality or "").strip().lower())
+    return int(m.group(1)) if m else None
+
+
+def _bar(pct: float, width: int = 22) -> str:
+    pct = max(0.0, min(100.0, pct))
+    filled = int(round(width * pct / 100))
+    return "█" * filled + "░" * (width - filled)
+
+
+def _eta(seconds: Any) -> str:
+    try:
+        total = int(float(seconds))
+    except (TypeError, ValueError):
+        return ""
+    if total <= 0:
+        return ""
+    return f"  ETA {total // 60:02d}:{total % 60:02d}"
+
+
 def _progress_printer(prefix: str):
-    """Barre stable : la taille totale HLS est figée dès la première estimation."""
+    """Barre de progression stable : la taille totale HLS est figée au départ."""
     state = {"pct": -1, "total": 0.0}
+    interactive = sys.stdout.isatty()
 
     def hook(d: dict[str, Any]) -> None:
         if d.get("status") == "downloading":
@@ -54,12 +92,17 @@ def _progress_printer(prefix: str):
             else:
                 pct = 0
 
-            if pct >= state["pct"] + 5 or (pct >= 100 > state["pct"]):
+            step = 1 if interactive else 5
+            if pct >= state["pct"] + step or (pct >= 100 > state["pct"]):
                 state["pct"] = pct
                 speed = (d.get("speed") or 0) / 1024 / 1024
                 total = f"{state['total'] / 1048576:.1f}" if state["total"] else "?"
-                log(f"   {prefix} {pct:3d}%  {done / 1048576:6.1f}/{total} Mo  {speed:5.1f} Mo/s")
+                status_line(
+                    f"{prefix} {_bar(pct)} {pct:3d}%  "
+                    f"{done / 1048576:5.1f}/{total} Mo  {speed:4.1f} Mo/s{_eta(d.get('eta'))}"
+                )
         elif d.get("status") == "finished":
+            end_status()
             log(f"   {prefix} 100% — assemblage/mux ffmpeg…")
 
     return hook
@@ -144,8 +187,15 @@ def _download_once(
 
     elapsed = time.time() - started
     duration = probe_duration(final, ffmpeg)
+    width, height = probe_resolution(final, ffmpeg)
+    res = f", {width}x{height}" if width and height else ""
     log(f"[dl] OK {final.name} — {final.stat().st_size / 1048576:.1f} Mo en {elapsed:.0f}s"
-        + (f", durée {duration:.0f}s" if duration else ""))
+        + (f", durée {duration:.0f}s" if duration else "") + res)
+
+    wanted = requested_height(quality)
+    if wanted and height and height > wanted * 1.15:
+        log(f"[dl] ⚠ qualité réelle {height}p pour {wanted}p demandés : "
+            "le flux n'expose peut-être pas cette variante")
     return final, duration
 
 

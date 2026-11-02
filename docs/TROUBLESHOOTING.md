@@ -26,6 +26,8 @@ En cas d'échec de capture, `main.py` produit de son côté
 | qualité toujours la même | choix mémorisé | supprimer `.progress.json` du dossier série, ou `--quality 1080` |
 | **É02 contient É01** (image identique, autre qualité) | le player n'a pas changé d'épisode, ou la page a redirigé | le script refuse désormais ce cas (`stream_identity_check`) ; lancer `probe.py` sur É02 et vérifier que l'iframe change bien de `src` |
 | fichier E02 déjà mauvais | épisode marqué `done` dans `.progress.json` | `python main.py "<url>" --redo 2` (supprime le fichier et l'entrée) |
+| **qualité `worst` mais fichier énorme (600 Mo)** | le player avait demandé directement une sous-playlist (`index-v1-a1.m3u8`), donc aucun choix possible | corrigé : le master est préféré ; vérifier le log `[hls] master retenu` et la résolution affichée par `[dl] OK … , 640x360` |
+| `[hls] flux unique (aucune variante)` | le site n'expose pas de master HLS | qualité impossible à changer ; télécharger tel quel ou changer de serveur |
 | `espace disque insuffisant` | `min_free_gb` atteint | libérer de l'espace ou changer `base_output` |
 | `ffmpeg introuvable` | installation incomplète | `pip install imageio-ffmpeg` |
 

@@ -15,7 +15,7 @@ BANNER = r"""
 ░    ░ ░  ·░ ░   ∙░ ░   ░ ░ .  ░ ░   ∙░ ░   ░ ░   ░ ░    ░▄▄▄▄▄▄      ░       ·. ░ ░    ░▄▄▄▄▄▄
 █ .  █ █   █ █ ∙  █ █   █ █    █ █ ∙  █ █   █ █   █ █    .    ·█      █   .      █ █    .    ·█
 █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█      █▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█  
-                  téléchargement automatique d'épisodes  ·  v1.1 by Hinmaka
+                  téléchargement automatique d'épisodes  ·  v1.2 by Hinmaka
 """
 
 
@@ -113,6 +113,11 @@ def run_download(raw: str, dry_run: bool = False) -> None:
 
 
 def main() -> int:
+    if "--update" in sys.argv[1:]:
+        from update import run_update
+
+        return run_update(with_deps="--deps" in sys.argv)
+
     while True:
         cfg = load_config()
         print(BANNER)
@@ -126,6 +131,7 @@ def main() -> int:
             "  6) Navigateur\n"
             "  7) Affichage (fenêtre / masquée / headless)\n"
             "  8) Réinitialiser les préférences\n"
+            "  9) Mettre à jour depuis GitHub\n"
             "  0) Quitter"
         )
         choice = ask("\n  Votre choix")
@@ -191,6 +197,16 @@ def main() -> int:
             if USER_PREFS_PATH.exists():
                 USER_PREFS_PATH.unlink()
             log("  Préférences supprimées (config.yaml restaurée).")
+
+        elif choice in ("9", "u", "update"):
+            try:
+                from update import run_update
+
+                log("")
+                run_update(with_deps=True)
+                log("  Relance AnimeDL pour charger la nouvelle version.")
+            except Exception as exc:
+                log(f"  Mise à jour impossible : {type(exc).__name__}: {exc}")
 
         else:
             log("  Choix invalide.")

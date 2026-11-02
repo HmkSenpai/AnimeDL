@@ -65,6 +65,24 @@ son binaire via `executable_path`. Chrome et Edge passent par `channel`.
 yt-dlp ré-estime la taille totale à chaque fragment HLS, ce qui fait « reculer »
 une barre classique. `downloader.py` fige le total au premier `dltotal > 0`
 (`frozen_total`) et calcule l'avancement par différence de `downloaded_bytes`.
+Le pourcentage vient du couple `fragment_index` / `fragment_count`, plus fiable
+que la taille estimée. `common.status_line()` réécrit la ligne sur place quand
+la console est interactive (`\r`), sinon écrit une ligne tous les 5 %.
+
+### Le master, pas la sous-playlist
+
+Le player (hls.js) demande `master.m3u8`, puis **bascule** sur une variante
+(`index-v1-a1.m3u8`). Les deux requêtes sont captées ; garder la dernière
+revenait à figer la qualité choisie par le player — d'où un fichier en 1080p
+même avec `quality: worst`.
+
+`_evaluate_candidates()` collecte désormais tous les candidats valides de la
+période et retient celui qui a le plus de variantes (`#EXT-X-STREAM-INF`). La
+sélection `best[height<=720]` / `worst` de yt-dlp s'applique alors réellement.
+Sans master, le flux unique est utilisé et un avertissement est loggé.
+`probe_resolution()` relit la résolution du fichier final pour vérifier.
+
+
 
 ### Un épisode = un flux
 

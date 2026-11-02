@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from common import ffmpeg_exe, log
-from downloader import download, format_selector, probe_duration
+from downloader import _bar, download, format_selector, probe_duration, requested_height
 from hls import inspect
 
 HERE = Path(__file__).resolve().parent
@@ -78,6 +78,11 @@ def main() -> int:
         (format_selector("worst") == "worst", "sélecteur worst"),
         (info.variants[0].height == 480, "tri décroissant"),
         (height == 240, "téléchargement en 240p"),
+        (_bar(0).count("█") == 0 and _bar(0).count("░") == 22, "barre à 0 %"),
+        (_bar(50).count("█") == 11, "barre à 50 %"),
+        (_bar(100).count("░") == 0, "barre à 100 %"),
+        (requested_height("720") == 720 and requested_height("worst") is None,
+         "hauteur demandée extraite"),
     ]
     for ok, label in checks:
         log(("  ✅ " if ok else "  ❌ ") + label)

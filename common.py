@@ -26,6 +26,31 @@ def log(msg: str) -> None:
     print(msg, flush=True)
 
 
+def status_line(text: str) -> None:
+    """Réécrit une ligne sur place (barre de progression) si la console le permet."""
+    if sys.stdout.isatty():
+        try:
+            width = shutil.get_terminal_size((100, 24)).columns
+        except Exception:
+            width = 100
+        content = text[: max(20, width - 1)]
+        sys.stdout.write("\r" + content.ljust(len(content)))
+        sys.stdout.flush()
+    else:
+        log(text)
+
+
+def end_status() -> None:
+    """Termine proprement la ligne de progression en cours."""
+    if sys.stdout.isatty():
+        try:
+            width = shutil.get_terminal_size((100, 24)).columns
+        except Exception:
+            width = 100
+        sys.stdout.write("\r" + " " * max(20, width - 1) + "\r")
+        sys.stdout.flush()
+
+
 def die(msg: str, code: int = 1) -> None:
     print(f"ERREUR: {msg}", file=sys.stderr, flush=True)
     raise SystemExit(code)

@@ -423,8 +423,14 @@ class ManifestCapture:
             return None
 
     def _evaluate_candidates(self) -> CaptureResult | None:
-        """Valide les nouveaux manifests ; renvoie le premier qui ressemble à l'épisode."""
+        """Valide les nouveaux manifests et retient le meilleur candidat.
+
+        Priorité au **master** (plusieurs variantes) : c'est le seul qui permet de
+        respecter la qualité demandée. Le player, lui, demande souvent directement
+        une sous-playlist (`index-v1-a1.m3u8`), ce qui figeait le débit maximal.
+        """
         min_dur = float(self.cfg.get("min_manifest_duration_s", 60))
+        candidates: list[CaptureResult] = []
         best: CaptureResult | None = None
         best_dur = -1.0
 
@@ -456,13 +462,22 @@ class ManifestCapture:
             if info.duration is None:
                 # pas de #EXTINF lisible : accepté seulement si autorisé
                 if self.cfg.get("allow_unknown_duration", False):
-                    return cand
+                    candidates.append(cand)
                 continue
             if dur >= min_dur:
-                return cand
-            # trop court => très probablement une pub, on garde de côté
-            if dur > best_dur:
+                candidates.append(cand)
+            elif dur > best_dur:
+                # trop court => très probablement une pub, on garde de côté
                 best, best_dur = cand, dur
+
+        if candidates:
+            masters = [c for c in candidates if len(c.variants) > 1]
+            if masters:
+                chosen = max(masters, key=lambda c: len(c.variants))
+                log(f"[hls] master retenu ({len(chosen.variants)} qualités) — le choix de qualité s'applique")
+                return chosen
+            log("[hls] flux unique (aucune variante) — la qualité ne peut pas être modifiée")
+            return candidates[0]
 
         if best is not None:
             log(f"[hls] aucun manifest ≥ {min_dur:.0f}s ; le plus long vu : {best_dur:.0f}s (pub ?)")

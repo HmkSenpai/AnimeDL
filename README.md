@@ -56,6 +56,9 @@ page série ──► liste des épisodes ──► player (Playwright)
 - **Filtre anti-publicité** : blocage réseau, fermeture des popups, `window.open`
   neutralisé, et rejet des manifests trop courts (pré-roll).
 - **Choix de la qualité** (SD / HD / FHD) demandé une seule fois, mémorisé pour la série.
+  Le script remonte au `master.m3u8` pour que le choix s'applique vraiment, et
+  vérifie la résolution réelle du fichier obtenu.
+- **Barre de progression stable** (fragments HLS, pourcentage, vitesse, ETA).
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
   rejoue les échecs.
 - **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique au
@@ -64,6 +67,7 @@ page série ──► liste des épisodes ──► player (Playwright)
 - **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
 - **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
 - **Aucun Chromium à télécharger** si Chrome / Edge / Brave est déjà présent.
+- **Mise à jour intégrée** : `AnimeDL.bat --update` (git pull ou archive GitHub).
 
 ## Prérequis
 
@@ -130,6 +134,24 @@ Dans l'option 1, tu peux coller l'URL **et ses options sur la même ligne** :
 
 Les guillemets autour de l'URL sont acceptés (et retirés), ainsi que les
 chemins Windows (`--output "D:\Anime"`).
+
+## Mise à jour
+
+Le script est sur GitHub : une commande récupère la dernière version.
+
+```powershell
+AnimeDL.bat --update        # Windows (menu ou CLI)
+python update.py            # tous systèmes
+python update.py --check    # voir s'il y a du retard, sans rien modifier
+python update.py --deps     # mettre à jour aussi les dépendances pip
+```
+
+- Dépôt git → `git fetch` + `git pull --ff-only` (repli `--rebase --autostash`
+  si des fichiers locaux gênent) ;
+- installation sans git → téléchargement de l'archive `main` et copie des
+  fichiers, **sans écraser `config.yaml` ni `user.yaml`**.
+
+Dans le menu interactif : option **9**.
 
 ## Ligne de commande
 
@@ -231,6 +253,34 @@ Choix [1-3, Entrée = 1] :
 Le choix s'applique à **tous les épisodes** et est mémorisé dans `.progress.json`.
 Sans terminal interactif, la meilleure qualité est utilisée.
 
+Quand le player a déjà demandé une sous-playlist (`index-v1-a1.m3u8`), le script
+remonte au **master** capté sur la même page : c'est la seule façon de faire
+respecter `worst` / `720`. Si le site n'expose aucun master, le flux unique est
+utilisé et la ligne suivante s'affiche :
+
+```
+[hls] flux unique (aucune variante) — la qualité ne peut pas être modifiée
+```
+
+Après chaque téléchargement, la résolution réelle est vérifiée :
+
+```
+[dl] OK Anime - S01E02.mp4 — 98.4 Mo en 41s, durée 1440s, 640x360
+[dl] ⚠ qualité réelle 1080p pour 480p demandés : le flux n'expose peut-être pas cette variante
+```
+
+## Barre de progression
+
+Une barre est réécrite sur place (pourcentage, Mo, vitesse, ETA) :
+
+```
+E02 ████████░░░░░░░░░░░░░░  36%   98.4/665.8 Mo  4.2 Mo/s  ETA 02:14
+```
+
+Elle est recalculée sur le nombre de fragments HLS (pas sur la taille estimée),
+donc elle ne recule pas. Dans un fichier de log (sortie non interactive), la
+barre est écrite en lignes de 5 %.
+
 ## Publicités et validation du flux
 
 - blocage réseau des régies connues et des `ad_hosts` ;
@@ -292,6 +342,7 @@ python _smoke/quality/run_quality.py       # variantes SD/HD/FHD
 python _smoke/sources/run_sources.py       # 4 serveurs, bascule automatique
 python _smoke/browsers/check.py            # navigateurs déjà installés
 python _smoke/menu/run_argv.py             # saisie « URL + options » du menu
+python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
 python _smoke/episodes/run_identity.py     # un épisode = un flux différent
 ```
 
@@ -310,6 +361,7 @@ adblock.py         blocage publicitaire et neutralisation des popups
 downloader.py      yt-dlp + vérification ffmpeg
 progress.py        état .progress.json
 common.py          configuration, logs UTF-8, ffmpeg, navigateurs, disque
+update.py          mise à jour depuis GitHub (git pull ou archive zip)
 probe.py           diagnostic du player
 setup.ps1          installation Windows (venv + dépendances)
 ```
