@@ -36,7 +36,7 @@ jobs:
         run: python -m playwright install --with-deps chromium
 
       - name: Vérifier la compilation
-        run: python -m compileall -q adblock.py app.py capture.py common.py downloader.py hls.py main.py probe.py progress.py scraper.py update.py
+        run: python -m compileall -q adblock.py app.py capture.py check_env.py common.py downloader.py hls.py main.py probe.py progress.py scraper.py update.py
 
       - name: Tests hors ligne
         run: |

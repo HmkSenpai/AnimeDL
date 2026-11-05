@@ -73,10 +73,22 @@ page série ──► liste des épisodes ──► player (Playwright)
 
 | Élément | Détail |
 |---|---|
-| Python | 3.11 ou plus récent |
+| Python | **3.10 à 3.13** (3.14/3.15 non supportés pour l'instant) |
 | Système | Windows 10/11, Linux ou macOS |
 | Navigateur | Chrome, Edge ou Brave installé — sinon Chromium Playwright |
 | Droits | aucun droit administrateur nécessaire |
+
+> **Pourquoi pas Python 3.14/3.15 ?** `PyYAML` et `greenlet` (dépendance de
+> Playwright) n'ont pas encore de wheels pour ces versions. `pip` tente alors de
+> compiler, ce qui réclame Visual C++ Build Tools et échoue avec
+> `Microsoft Visual C++ 14.0 or greater is required`.
+> Utilise Python 3.13 :
+>
+> ```powershell
+> winget install -e --id Python.Python.3.13
+> py -3.13 -m venv .venv
+> .\.venv\Scripts\python -m pip install -r requirements.txt
+> ```
 
 ## Installation
 
@@ -91,6 +103,16 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 `setup.ps1` crée un environnement `.venv`, installe les dépendances et ne
 télécharge Chromium **que si aucun navigateur n'est déjà installé**.
 `AnimeDL.bat` détecte ensuite `.venv` automatiquement.
+
+Le script choisit lui-même un interpréteur compatible (`py -3.13`, `py -3.12`,
+`py -3.11`, `py -3.10`), recrée `.venv` s'il a été créé avec une version trop
+récente, et propose d'installer Python 3.13 via `winget` si nécessaire.
+
+```powershell
+.\setup.ps1 -Python 3.13     # forcer un interpréteur
+.\setup.ps1 -Check           # juste vérifier, sans rien installer
+.\setup.ps1 -NoInstall       # ne rien installer automatiquement
+```
 
 ### Linux / macOS
 
@@ -107,6 +129,7 @@ python -m playwright install chromium
 ### Installation manuelle (tous systèmes)
 
 ```bash
+python --version                        # 3.10 à 3.13
 pip install -r requirements.txt
 python -m playwright install chromium   # optionnel, voir ci-dessus
 ```
@@ -352,6 +375,7 @@ La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.
 
 ```
 AnimeDL.bat        lanceur Windows du menu
+check_env.py       controle version Python + dependances avant lancement
 app.py             menu interactif
 main.py            orchestrateur (CLI, boucle, serveurs, reprise)
 scraper.py         extraction de la liste des épisodes

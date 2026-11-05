@@ -30,6 +30,27 @@ En cas d'échec de capture, `main.py` produit de son côté
 | `[hls] flux unique (aucune variante)` | le site n'expose pas de master HLS | qualité impossible à changer ; télécharger tel quel ou changer de serveur |
 | `espace disque insuffisant` | `min_free_gb` atteint | libérer de l'espace ou changer `base_output` |
 | `ffmpeg introuvable` | installation incomplète | `pip install imageio-ffmpeg` |
+| `Microsoft Visual C++ 14.0 or greater is required` / `Failed building wheel for PyYAML` | Python 3.14 ou 3.15 : pas de wheels PyYAML/greenlet, pip compile | installer Python 3.13 : `winget install -e --id Python.Python.3.13` puis `py -3.13 -m venv .venv --clear` |
+
+## Python trop récent
+
+`setup.ps1 -Check` indique l'interpréteur qui serait utilisé. Le script choisit
+automatiquement `py -3.13` / `-3.12` / `-3.11` / `-3.10`, recrée `.venv` s'il est
+trop récent et propose `winget install Python.Python.3.13`.
+
+```powershell
+py -0p                                  # lister les Python installés
+.\setup.ps1 -Check                      # voir lequel serait choisi
+.\setup.ps1 -Python 3.13                # forcer
+```
+
+Réparation manuelle d'un `.venv` créé en 3.15 :
+
+```powershell
+Remove-Item -Recurse -Force .venv
+py -3.13 -m venv .venv
+.\.venv\Scripts\python -m pip install -r requirements.txt
+```
 
 ## Le site a changé
 
