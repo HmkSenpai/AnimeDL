@@ -2,26 +2,18 @@
 
 **Télécharge une série entière depuis un player HLS : capture du `master.m3u8`, export MP4, reprise automatique.**
 
-[![CI](https://github.com/HmkSenpai/AnimeDL/actions/workflows/ci.yml/badge.svg)](https://github.com/HmkSenpai/AnimeDL/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)](#installation)
-<center><img width="732" height="185" alt="image" src="https://github.com/user-attachments/assets/ce4c2b9e-800c-427e-ad42-0bfe1c44b8a4" /></center>
+<img width="1153" height="222" alt="image" src="https://github.com/user-attachments/assets/427a22f2-18ec-4341-a2cf-d6bc7f3d4510" />
+
 
 AnimeDL pilote un vrai navigateur (Playwright) pour déclencher le player, capter
 l'URL signée du manifest HLS, puis laisse `yt-dlp` + `ffmpeg` produire un `.mp4`.
 Il parcourt la liste des épisodes, essaie automatiquement les différents serveurs,
 ignore les publicités et reprend là où il s'est arrêté.
 
-```
-page série ──► liste des épisodes ──► player (Playwright)
-                                            │
-                                  master.m3u8 signé (token frais)
-                                            │
-                                     validation HLS
-                                            │
-                                 yt-dlp + ffmpeg ──► S01E01.mp4
-```
+<img width="1826" height="560" alt="Gemini_Generated_Image_w85spbw85spbw85s" src="https://github.com/user-attachments/assets/d3750e4b-83c9-4889-9e9c-fdfe718f2a22" />
 
 ---
 
@@ -142,7 +134,8 @@ python app.py          # tous systèmes
 ```
 
 
-<img width="740" height="696" alt="image" src="https://github.com/user-attachments/assets/0421ee1b-8a03-4fc1-b5b7-21e122f231b1" />
+<img width="1160" height="783" alt="image" src="https://github.com/user-attachments/assets/a3804589-3aed-4593-b7e6-89d055706b03" />
+
 
 
 Les choix du menu sont enregistrés dans `user.yaml` (non versionné), qui
