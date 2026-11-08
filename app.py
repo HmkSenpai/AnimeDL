@@ -1,6 +1,7 @@
 """AnimeDL — menu interactif (lancer : python app.py ou AnimeDL.bat)."""
 from __future__ import annotations
 
+import re
 import shlex
 import sys
 
@@ -43,6 +44,37 @@ def show_settings(cfg: dict) -> None:
     log(f"  Serveurs          : {cfg.get('sources') or 'auto (tous détectés)'}")
     log(f"  Anti-pub          : actif ({len(cfg.get('ad_hosts') or [])} hôte(s) perso)")
     log(f"  Préférences       : {USER_PREFS_PATH.name if USER_PREFS_PATH.exists() else 'aucune'}")
+
+
+def resolve_choice(raw: str, options: list[str], default_index: int = 0) -> str | None:
+    """Traduit une saisie en valeur de la liste (numéro ou valeur exacte)."""
+    text = (raw or "").strip()
+    if not text:
+        return options[default_index] if 0 <= default_index < len(options) else None
+    if text.isdigit():
+        index = int(text) - 1
+        return options[index] if 0 <= index < len(options) else None
+    return text if text in options else None
+
+
+def pick(title: str, options: list[tuple[str, str]], default: str = "") -> str | None:
+    """Menu numéroté : renvoie la valeur choisie, ou None si annulé (q)."""
+    values = [value for _, value in options]
+    default_index = values.index(default) if default in values else 0
+
+    while True:
+        log(f"\n  {title}")
+        for index, (label, _) in enumerate(options, 1):
+            current = "   (actuel)" if index - 1 == default_index else ""
+            log(f"    {index}) {label}{current}")
+        raw = ask("  Choix", str(default_index + 1))
+        if raw.strip().lower() in ("q", "quit", "annuler"):
+            return None
+        chosen = resolve_choice(raw, values, default_index)
+        if chosen is None:
+            log("  Choix invalide — entre un numéro de la liste.")
+            continue
+        return chosen
 
 
 def split_input(raw: str) -> list[str]:
@@ -170,28 +202,84 @@ def main() -> int:
             log(f"  Dossier enregistré : {new_path}")
 
         elif choice == "4":
-            log("  Valeurs : ask (demander), best, worst, ou une hauteur (480, 720, 1080)")
-            quality = ask("  Qualité", str(cfg.get("quality", "ask")))
-            save_user_prefs({"quality": quality})
-            log(f"  Qualité enregistrée : {quality}")
+            current = str(cfg.get("quality", "ask"))
+            options = [
+                ("Demander au 1er épisode (ask)", "ask"),
+                ("Meilleure disponible (best)", "best"),
+                ("La plus basse (worst)", "worst"),
+                ("480p", "480"),
+                ("720p", "720"),
+                ("1080p", "1080"),
+                ("Autre hauteur…", "__custom__"),
+            ]
+            while True:
+                picked = pick("Qualité par défaut", options, current)
+                if picked is None:
+                    log("  Inchangé.")
+                    break
+                if picked == "__custom__":
+                    raw = ask("  Hauteur en p (ex: 900)", "")
+                    if not re.fullmatch(r"\d{3,4}", raw.strip()):
+                        log("  Hauteur invalide — 3 ou 4 chiffres, ex: 720.")
+                        continue
+                    picked = raw.strip()
+                save_user_prefs({"quality": picked})
+                log(f"  Qualité enregistrée : {picked}")
+                break
 
         elif choice == "5":
-            log("  'auto' = tous les serveurs détectés ; sinon ex: 1,2,4")
-            sources = ask("  Serveurs", str(cfg.get("sources") or "auto"))
-            save_user_prefs({"sources": "" if sources.lower() == "auto" else sources})
-            log(f"  Serveurs enregistrés : {sources}")
+            current = str(cfg.get("sources") or "")
+            options = [
+                ("Tous les serveurs détectés (auto)", ""),
+                ("Premier seulement", "1"),
+                ("Les deux premiers", "1,2"),
+                ("Les trois premiers", "1,2,3"),
+                ("Autre liste (ex: 1,3,4)", "__custom__"),
+            ]
+            while True:
+                picked = pick("Serveurs à essayer", options, current)
+                if picked is None:
+                    log("  Inchangé.")
+                    break
+                if picked == "__custom__":
+                    raw = ask("  Numéros séparés par des virgules", "")
+                    if not re.fullmatch(r"\d+(\s*,\s*\d+)*", raw.strip()):
+                        log("  Liste invalide — ex: 1,3,4")
+                        continue
+                    picked = re.sub(r"\s+", "", raw.strip())
+                save_user_prefs({"sources": picked})
+                log(f"  Serveurs enregistrés : {picked or 'auto'}")
+                break
 
         elif choice == "6":
-            log("  auto = navigateur déjà installé (recommandé) ; sinon chromium, chrome, brave, msedge")
-            browser = ask("  Navigateur", str(cfg.get("browser", "auto")))
-            save_user_prefs({"browser": browser})
-            log(f"  Navigateur enregistré : {browser}")
+            current = str(cfg.get("browser", "auto"))
+            options = [
+                ("Automatique — navigateur installé (auto)", "auto"),
+                ("Chromium embarqué Playwright", "chromium"),
+                ("Google Chrome", "chrome"),
+                ("Brave", "brave"),
+                ("Microsoft Edge", "msedge"),
+            ]
+            picked = pick("Navigateur", options, current)
+            if picked is None:
+                log("  Inchangé.")
+            else:
+                save_user_prefs({"browser": picked})
+                log(f"  Navigateur enregistré : {picked}")
 
         elif choice == "7":
-            log("  window = fenêtre visible, hidden = hors écran (recommandé), headless = invisible")
-            display = ask("  Affichage", str(cfg.get("display", "window")))
-            save_user_prefs({"display": display})
-            log(f"  Affichage enregistré : {display}")
+            current = str(cfg.get("display", "window"))
+            options = [
+                ("Fenêtre visible (window)", "window"),
+                ("Fenêtre hors écran (hidden, recommandé)", "hidden"),
+                ("Invisible (headless, souvent bloqué)", "headless"),
+            ]
+            picked = pick("Affichage", options, current)
+            if picked is None:
+                log("  Inchangé.")
+            else:
+                save_user_prefs({"display": picked})
+                log(f"  Affichage enregistré : {picked}")
 
         elif choice == "8":
             if USER_PREFS_PATH.exists():

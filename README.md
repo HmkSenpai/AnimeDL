@@ -53,8 +53,10 @@ ignore les publicités et reprend là où il s'est arrêté.
 - **Barre de progression stable** (fragments HLS, pourcentage, vitesse, ETA).
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
   rejoue les échecs.
-- **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique au
-  précédent (player bloqué), au lieu d'enregistrer deux fois la même vidéo.
+- **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique à un
+  épisode déjà téléchargé (player bloqué), même après un redémarrage — l'empreinte
+  est conservée dans `.progress.json`. La page est rechargée une fois avant de
+  déclarer l'échec, ce qui débloque souvent le player.
 - **Vérification du fichier final** : durée, taille, absence de `.part`.
 - **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
 - **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
@@ -150,6 +152,10 @@ Dans l'option 1, tu peux coller l'URL **et ses options sur la même ligne** :
 
 Les guillemets autour de l'URL sont acceptés (et retirés), ainsi que les
 chemins Windows (`--output "D:\Anime"`).
+
+Les sous-menus (**Qualité**, **Serveurs**, **Navigateur**, **Affichage**) se
+choisissent au **numéro** : une saisie hors liste est refusée et la question est
+reposée. Entrée garde la valeur actuelle, `q` annule.
 
 ## Mise à jour
 
@@ -328,7 +334,7 @@ Une fois la capture faite, le téléchargement n'utilise plus le navigateur.
 <base_output>/<Titre série>/
 ├── <Titre> - S01E01.mp4
 ├── <Titre> - S01E02.mp4
-└── .progress.json        # épisodes terminés, échecs, qualité choisie
+└── .progress.json        # épisodes terminés, empreintes de flux, échecs, qualité choisie
 ```
 
 En cas d'échec, `logs/` contient `fail-<épisode>-<date>.json` et un screenshot.
@@ -357,9 +363,9 @@ python _smoke/adfilter/run_adfilter.py     # pub pré-roll ignorée
 python _smoke/quality/run_quality.py       # variantes SD/HD/FHD
 python _smoke/sources/run_sources.py       # 4 serveurs, bascule automatique
 python _smoke/browsers/check.py            # navigateurs déjà installés
-python _smoke/menu/run_argv.py             # saisie « URL + options » du menu
+python _smoke/menu/run_argv.py             # saisie « URL + options » du menu, choix numérotés
 python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
-python _smoke/episodes/run_identity.py     # un épisode = un flux différent
+python _smoke/episodes/run_identity.py     # un épisode = un flux différent (+ empreintes persistées)
 ```
 
 La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.

@@ -7,7 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from app import build_argv, split_input  # noqa: E402
+from app import build_argv, resolve_choice, split_input  # noqa: E402
 from common import log  # noqa: E402
 from main import build_parser  # noqa: E402
 
@@ -78,6 +78,16 @@ def main() -> int:
     args = build_parser().parse_args(build_argv("https://site.test/a/ --from-ep 7 --quality 480", CFG))
     checks.append((args.url == "https://site.test/a/" and args.from_ep == 7 and args.quality == "480",
                    f"argparse cohérent -> url={args.url} from_ep={args.from_ep} quality={args.quality}"))
+
+    options = ["ask", "best", "worst", "720"]
+    checks += [
+        (resolve_choice("3", options) == "worst", "menu : numéro 3 -> worst"),
+        (resolve_choice("", options, 2) == "worst", "menu : entrée vide -> défaut"),
+        (resolve_choice("99", options) is None, "menu : numéro hors liste refusé"),
+        (resolve_choice("0", options) is None, "menu : 0 refusé"),
+        (resolve_choice("best", options) == "best", "menu : valeur exacte acceptée"),
+        (resolve_choice("nimporte quoi", options) is None, "menu : texte libre refusé"),
+    ]
 
     for ok, label in checks:
         log(("  ✅ " if ok else "  ❌ ") + label)

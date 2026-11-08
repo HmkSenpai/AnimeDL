@@ -92,10 +92,15 @@ Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau 
    qui change d'épisode via `?ep=2` déclenche bien une navigation (avant, la
    query était ignorée, donc `_loaded_episode` restait inchangé).
 2. **Identité de flux** — chaque manifest capté reçoit une empreinte
-   (`premier segment + durée`). Si l'empreinte d'un épisode est déjà celle d'un
-   autre, `main.py` refuse le téléchargement (`stream_identity_check`) et essaie
-   le serveur suivant. Cela couvre le cas d'un player bloqué sur l'épisode
-   précédent, qui joue la même vidéo dans une autre qualité.
+   (`identifiant de média normalisé + durée`). L'identifiant est le chemin du
+   manifest/variante débarrassé des marqueurs de qualité (`index-v1-a1` →
+   `index`, dossier `1080/` ignoré) : le même épisode joué dans une autre
+   variante garde donc la même empreinte, alors qu'un autre épisode change de
+   dossier. L'empreinte est stockée dans `.progress.json`, donc un épisode
+   téléchargé lors d'une exécution précédente est aussi protégé. Si elle
+   correspond à un autre épisode, `main.py` recharge la page une fois
+   (`forget_page()`), puis refuse le téléchargement
+   (`stream_identity_check`) et passe au serveur suivant.
 3. **Vérification d'atterrissage** — après navigation, si l'URL finale désigne
    un autre numéro d'épisode (redirection), la capture est annulée au lieu de
    télécharger la mauvaise page.
@@ -109,7 +114,7 @@ Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau 
 
 | Fichier | Contenu |
 |---|---|
-| `.progress.json` | `done{code: {file, source}}`, `failed{code: raison}`, `quality` |
+| `.progress.json` | `done{code: {file, source, fingerprint}}`, `failed{code: raison}`, `quality` |
 | `logs/fail-*.json` | URL visitées, requêtes `.m3u8`, erreurs, config utile |
 | `logs/fail-*.png` | capture d'écran au moment de l'échec |
 | `logs/probe-*.json/png` | rapport de `probe.py` |

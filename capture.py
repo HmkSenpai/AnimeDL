@@ -28,6 +28,33 @@ DEFAULT_UA = (
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
 
+# Marqueurs de qualité rencontrés dans les URLs HLS (variantes du même média).
+_RES_TOKEN = r"(?:240|360|480|540|576|720|900|1080|1440|2160)"
+_QUALITY_SUFFIX_RE = re.compile(
+    rf"(?i)(?:[-_.](?:v\d+|a\d+|fhd|uhd|hd|sd|{_RES_TOKEN}p?))+$"
+)
+_QUALITY_TOKEN_RE = re.compile(rf"(?i)^(?:v\d+|a\d+|fhd|uhd|hd|sd|{_RES_TOKEN}p?)$")
+
+
+def content_path(url: str) -> str:
+    """Identifiant de média stable entre variantes de qualité.
+
+    `.../e45quei92eb4_n/index-v1-a1.m3u8` et `.../e45quei92eb4_n/index-v2-a1.m3u8`
+    donnent le même identifiant, alors qu'un autre épisode change de dossier.
+    """
+    parts = [p for p in urlparse(url).path.split("/") if p]
+    if not parts:
+        return ""
+    name = parts[-1]
+    stem, dot, ext = name.rpartition(".")
+    if dot and len(ext) <= 5:
+        stem = _QUALITY_SUFFIX_RE.sub("", stem) or stem
+        parts[-1] = f"{stem}.{ext}"
+    else:
+        parts[-1] = _QUALITY_SUFFIX_RE.sub("", name) or name
+    kept = [p for p in parts if not _QUALITY_TOKEN_RE.fullmatch(p)]
+    return "/".join(kept or parts).lower()
+
 JS_MARK_PLAY = """() => {
   const rx = /(play|lecteur|regarder|launch)/i;
   const out = [];
@@ -403,13 +430,14 @@ class ManifestCapture:
 
     # -------------------------------------------------------- validation HLS
     def _fingerprint(self, info: hls.ManifestInfo) -> str:
-        """Empreinte du contenu : premier segment (ou manifest) + durée.
+        """Empreinte du contenu : identifiant du média normalisé + durée.
 
-        Deux épisodes différents ne doivent pas produire la même empreinte :
-        c'est ce qui détecte un player resté bloqué sur l'épisode précédent.
+        On part du manifest/variante (pas du premier segment) et on retire les
+        marqueurs de qualité (`index-v1-a1`, `-720p`, dossier `1080/`) : le même
+        épisode joué dans une autre variante doit garder la même empreinte.
         """
-        raw = info.segment or info.variant_url or info.url
-        return f"{urlparse(raw).path}|{round(info.duration or 0)}"
+        raw = info.variant_url or info.url
+        return f"{content_path(raw)}|{round(info.duration or 0)}"
 
     def _episode_number(self, url: str) -> int | None:
         if not self._pattern:
@@ -532,6 +560,10 @@ class ManifestCapture:
 
     def _same_episode_loaded(self, url: str) -> bool:
         return self._loaded_episode is not None and self._loaded_episode == self._canonical(url)
+
+    def forget_page(self) -> None:
+        """Force un rechargement complet au prochain capture (player figé)."""
+        self._loaded_episode = None
 
     def _check_landing_page(self, requested: str, tag: str) -> bool:
         """Vérifie que la page affichée est bien l'épisode demandé (pas de redirection)."""

@@ -16,8 +16,9 @@ sys.path.insert(0, str(ROOT))
 
 from playwright.sync_api import sync_playwright  # noqa: E402
 
-from capture import ManifestCapture  # noqa: E402
+from capture import ManifestCapture, content_path  # noqa: E402
 from common import ffmpeg_exe, log  # noqa: E402
+from progress import Progress  # noqa: E402
 from scraper import clean_href  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
@@ -147,6 +148,38 @@ def main() -> int:
         (ManifestCapture._canonical("http://x/a?ep=1") != ManifestCapture._canonical("http://x/a?ep=2"),
          "_canonical distingue les épisodes par query"),
     ]
+
+    # même épisode dans une autre variante de qualité -> même identifiant
+    checks += [
+        (content_path("https://cdn.test/hls/e45q/index-v1-a1.m3u8")
+         == content_path("https://cdn.test/hls/e45q/index-v2-a1.m3u8"),
+         "variantes -v1/-v2 du même média = même identifiant"),
+        (content_path("https://cdn.test/hls/e45q/1080/index.m3u8")
+         == content_path("https://cdn.test/hls/e45q/720/index.m3u8"),
+         "dossiers 1080/720 du même média = même identifiant"),
+        (content_path("https://cdn.test/hls/e45q/index.m3u8")
+         != content_path("https://cdn.test/hls/zz9x/index.m3u8"),
+         "deux médias différents = identifiants différents"),
+        (content_path("https://cdn.test/hls/303/index.m3u8")
+         != content_path("https://cdn.test/hls/304/index.m3u8"),
+         "dossiers d'épisodes voisins = identifiants différents"),
+    ]
+
+    # l'empreinte doit survivre à un redémarrage (stockée dans .progress.json)
+    state = HERE / ".progress-test.json"
+    state.unlink(missing_ok=True)
+    saved = Progress("serie-test", state)
+    saved.mark_done("01", Path("S01E01.mp4"), 0, "media1|6")
+    saved.mark_done("02", Path("S01E02.mp4"), 1)
+    saved.mark_failed("03", "boom")
+    reloaded = Progress("serie-test", state)
+    checks += [
+        (reloaded.stream_map() == {"media1|6": "01"},
+         f"empreintes rechargées depuis le disque -> {reloaded.stream_map()}"),
+        (reloaded.status("02").get("fingerprint") is None,
+         "épisode sans empreinte non injecté dans la carte"),
+    ]
+    state.unlink(missing_ok=True)
 
     for ok, label in checks:
         log(("  ✅ " if ok else "  ❌ ") + label)

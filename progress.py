@@ -27,13 +27,29 @@ class Progress:
     def is_done(self, code: str) -> bool:
         return self.status(code).get("status") == "done"
 
-    def mark_done(self, code: str, file: Path, source_index: int) -> None:
-        self.data["episodes"][code] = {
+    def mark_done(self, code: str, file: Path, source_index: int, fingerprint: str = "") -> None:
+        entry: dict[str, Any] = {
             "status": "done",
             "file": str(file),
             "source": source_index + 1,
         }
+        if fingerprint:
+            entry["fingerprint"] = fingerprint
+        self.data["episodes"][code] = entry
         self.save()
+
+    def stream_map(self) -> dict[str, str]:
+        """Empreinte de flux -> épisode, pour les épisodes déjà terminés.
+
+        Permet de détecter un doublon même quand l'épisode précédent a été
+        téléchargé lors d'une exécution antérieure.
+        """
+        out: dict[str, str] = {}
+        for code, entry in self.data["episodes"].items():
+            fingerprint = entry.get("fingerprint")
+            if entry.get("status") == "done" and fingerprint:
+                out[str(fingerprint)] = code
+        return out
 
     def mark_failed(self, code: str, error: str) -> None:
         prev = self.status(code)
