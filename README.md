@@ -51,6 +51,9 @@ ignore les publicités et reprend là où il s'est arrêté.
   Le script remonte au `master.m3u8` pour que le choix s'applique vraiment, et
   vérifie la résolution réelle du fichier obtenu.
 - **Barre de progression stable** (fragments HLS, pourcentage, vitesse, ETA).
+- **MP4 indexé (`faststart`)** : remux automatique après chaque épisode. Sans lui,
+  yt-dlp peut laisser un MPEG-TS dans un `.mp4`, ce qui provoque des freezes de
+  3-5 s à chaque déplacement dans la timeline.
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
   rejoue les échecs.
 - **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique à un
@@ -175,6 +178,23 @@ python update.py --deps     # mettre à jour aussi les dépendances pip
 
 Dans le menu interactif : option **9**.
 
+## Réparation des vidéos existantes
+
+Un `.mp4` qui freeze 3-5 s à chaque avance/recul dans la timeline est souvent un
+flux **MPEG-TS déguisé** (téléchargé par yt-dlp sans index `moov`). Un remux sans
+réencodage suffit :
+
+```powershell
+python repair.py                       # dossier de sortie de la config
+python repair.py "D:\Anime\Ma serie"   # un dossier précis
+python repair.py --dry-run             # liste les fichiers sans les modifier
+AnimeDL.bat --repair                   # même chose via le lanceur
+```
+
+Depuis cette version le remux est automatique après chaque téléchargement
+(`remux_mp4: true`), donc seuls les fichiers téléchargés avant ont besoin de ce
+passage. Menu interactif : option **10**.
+
 ## Ligne de commande
 
 ```bash
@@ -200,6 +220,13 @@ python main.py "https://SITE/anime/ma-serie/" --limit 2       # tester 2 épisod
 | `--min-duration S` | Durée minimale d'un épisode valide (secondes) |
 | `--min-size-mb N` | Taille minimale d'un fichier valide (Mo) |
 | `--fresh-profile` | Repart d'un profil navigateur vierge (perte de session) |
+
+Réparation des fichiers déjà téléchargés (voir
+[Réparation](#réparation-des-vidéos-existantes)) :
+
+```bash
+python repair.py [DOSSIER] [--dry-run]
+```
 
 Exemples :
 
@@ -228,6 +255,7 @@ les surcharge. Les deux sont fusionnés au démarrage.
 | `episode_pattern` | `-(\d+)-(vostfr\|vf)/?$` | Regex des liens d'épisode (appliquée au chemin) |
 | `prefer_vf` | `false` | Prendre la VF quand elle existe |
 | `fragment_concurrency` | `4` | Fragments HLS téléchargés en parallèle |
+| `remux_mp4` | `true` | Remux final en MP4 indexé + `faststart` (seek fluide) |
 | `delay_between_episodes_s` | `2` | Pause entre deux épisodes |
 | `min_duration_s` | `30` | En dessous, le fichier est invalide |
 | `min_size_mb` | `1` | Taille minimale d'un fichier valide |
@@ -366,6 +394,7 @@ python _smoke/browsers/check.py            # navigateurs déjà installés
 python _smoke/menu/run_argv.py             # saisie « URL + options » du menu, choix numérotés
 python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
 python _smoke/episodes/run_identity.py     # un épisode = un flux différent (+ empreintes persistées)
+python _smoke/mp4/run_mp4.py               # TS déguisé en .mp4 remuxé en MP4 indexé
 ```
 
 La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.
@@ -385,6 +414,7 @@ downloader.py      yt-dlp + vérification ffmpeg
 progress.py        état .progress.json
 common.py          configuration, logs UTF-8, ffmpeg, navigateurs, disque
 update.py          mise à jour depuis GitHub (git pull ou archive zip)
+repair.py          remux des .mp4 existants (seek fluide)
 probe.py           diagnostic du player
 setup.ps1          installation Windows (venv + dépendances)
 ```

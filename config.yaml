@@ -53,6 +53,10 @@ min_duration_s: 30          # en-dessous => fichier considéré invalide
 min_size_mb: 1              # taille minimale d'un fichier valide
 max_sources: 4              # repli si aucun serveur n'est détecté sur la page
 
+# Remux final en vrai MP4 (index moov + faststart). Sans lui, yt-dlp peut
+# laisser un MPEG-TS dans un .mp4 : le seek provoque des freezes de 3-5 s.
+remux_mp4: true
+
 # Navigateur piloté : auto (réutilise Chrome/Edge/Brave installé), chromium
 # (embarqué Playwright), chrome, brave, msedge
 browser: auto

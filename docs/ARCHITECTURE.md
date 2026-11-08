@@ -29,9 +29,20 @@ exactement pareil.
    (cookies, UA, Referer, Origin) et vérifie `#EXTM3U`, les segments et la durée.
    Les manifests trop courts sont rejetés (publicité).
 5. `downloader.download()` appelle yt-dlp avec l'URL signée et les en-têtes
-   appropriés, puis `verify()` contrôle durée, taille et absence de `.part`.
+   appropriés, puis `common.ensure_mp4()` remuxe en vrai MP4 (index `moov` +
+   `faststart`, copie sans réencodage) et `verify()` contrôle durée, taille et
+   absence de `.part`.
 6. `Progress.mark_done()` / `mark_failed()` met à jour l'état, puis pause
    `delay_between_episodes_s`.
+
+### Pourquoi un remux forcé
+
+Le téléchargeur HLS de yt-dlp écrit parfois les octets **MPEG-TS** tels quels
+dans `<épisode>.mp4` (le `.mp4` n'est qu'une extension). Sans index `moov`, le
+lecteur doit re-scanner le fichier à chaque déplacement : freezes de 3-5 s dans
+la timeline. `ensure_mp4()` détecte le cas (`ftyp` absent, `moov` après `mdat`)
+et remuxe avec `-c copy -movflags +faststart -avoid_negative_ts make_zero`.
+`repair.py` applique la même fonction aux fichiers déjà téléchargés.
 
 ## Décisions de conception
 

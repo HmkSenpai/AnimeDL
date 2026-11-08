@@ -29,6 +29,7 @@ En cas d'échec de capture, `main.py` produit de son côté
 | deux épisodes réellement identiques (spécial, recap) bloqués | le garde-fou les voit comme un doublon | mettre `stream_identity_check: false` dans `user.yaml` (ou `config.yaml`) le temps de ces épisodes |
 | fichier E02 déjà mauvais | épisode marqué `done` dans `.progress.json` | `python main.py "<url>" --redo 2` (supprime le fichier et l'entrée) |
 | **qualité `worst` mais fichier énorme (600 Mo)** | le player avait demandé directement une sous-playlist (`index-v1-a1.m3u8`), donc aucun choix possible | corrigé : le master est préféré ; vérifier le log `[hls] master retenu` et la résolution affichée par `[dl] OK … , 640x360` |
+| **freeze de 3-5 s** à chaque avance/recul dans la timeline | le fichier est un MPEG-TS avec une extension `.mp4` : aucun index, le lecteur re-scanne à chaque seek | `python repair.py` (ou `AnimeDL.bat --repair`, ou option **10** du menu) ; automatique pour les nouveaux épisodes (`remux_mp4: true`) |
 | `[hls] flux unique (aucune variante)` | le site n'expose pas de master HLS | qualité impossible à changer ; télécharger tel quel ou changer de serveur |
 | `espace disque insuffisant` | `min_free_gb` atteint | libérer de l'espace ou changer `base_output` |
 | `ffmpeg introuvable` | installation incomplète | `pip install imageio-ffmpeg` |

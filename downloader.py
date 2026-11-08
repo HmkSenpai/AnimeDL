@@ -12,7 +12,7 @@ from typing import Any
 
 import yt_dlp
 
-from common import end_status, ffmpeg_exe, log, status_line
+from common import end_status, ensure_mp4, ffmpeg_exe, log, status_line
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
 _RESOLUTION_RE = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
@@ -184,6 +184,10 @@ def _download_once(
     final = max(existing, key=lambda p: p.stat().st_size)
     if final.suffix.lower() != ".mp4":
         raise DownloadError(f"format inattendu : {final.name}")
+
+    # yt-dlp peut laisser un MPEG-TS dans un fichier .mp4 : sans index, chaque
+    # déplacement dans la timeline provoque un freeze de plusieurs secondes.
+    final = ensure_mp4(final, bool(cfg.get("remux_mp4", True)))
 
     elapsed = time.time() - started
     duration = probe_duration(final, ffmpeg)

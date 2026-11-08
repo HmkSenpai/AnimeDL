@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -201,6 +203,72 @@ def ensure_space(min_free_gb: float, target: Path) -> None:
     free_gb = shutil.disk_usage(target).free / (1024**3)
     if free_gb < min_free_gb:
         die(f"Espace disque insuffisant ({free_gb:.2f} Go libres, {min_free_gb} Go requis).")
+
+
+def mp4_is_indexed(path: Path) -> bool:
+    """Vrai si `path` est un vrai MP4 avec son index (`moov`) avant les données.
+
+    Le téléchargeur HLS de yt-dlp écrit parfois un flux **MPEG-TS** dans un
+    fichier `.mp4` : le lecteur n'a alors aucun index et doit re-scanner le
+    fichier à chaque déplacement dans la timeline (freezes de plusieurs
+    secondes). Un TS commence par l'octet de synchronisation `0x47`.
+    """
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(12)
+            if len(head) < 12 or head[4:8] != b"ftyp":
+                return False
+            pos = 0
+            for _ in range(16):
+                fh.seek(pos)
+                box = fh.read(8)
+                if len(box) < 8:
+                    return False
+                size = int.from_bytes(box[:4], "big")
+                kind = box[4:8]
+                if kind == b"moov":
+                    return True
+                if kind == b"mdat" or size < 8:
+                    return False
+                pos += size
+    except OSError:
+        return False
+    return False
+
+
+def ensure_mp4(path: Path, enabled: bool = True) -> Path:
+    """Remuxe le fichier en vrai MP4 (index `moov` + `faststart`).
+
+    Corrige les freezes de seek causés par un MPEG-TS renommé en `.mp4` ou par
+    un MP4 dont l'index est en fin de fichier. Le flux est copié sans réencodage
+    (perte nulle, quelques secondes pour ~100 Mo).
+    """
+    if not enabled or mp4_is_indexed(path):
+        return path
+
+    tmp = path.with_name(f"{path.stem}.mux{path.suffix}")
+    cmd = [
+        ffmpeg_exe(), "-hide_banner", "-loglevel", "error", "-y",
+        "-i", str(path),
+        "-map", "0:v:0", "-map", "0:a?",
+        "-c", "copy",
+        "-movflags", "+faststart",
+        "-avoid_negative_ts", "make_zero",
+        str(tmp),
+    ]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        if proc.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
+            detail = (proc.stderr or "").strip().splitlines()
+            raise RuntimeError(detail[-1] if detail else "ffmpeg a échoué")
+        os.replace(tmp, path)
+    except Exception as exc:  # noqa: BLE001 - on ne casse jamais un téléchargement réussi
+        tmp.unlink(missing_ok=True)
+        log(f"[mux] ⚠ remux impossible ({exc}) — fichier laissé tel quel")
+        return path
+
+    log(f"[mux] MP4 indexé + faststart — {path.stat().st_size / 1048576:.1f} Mo")
+    return path
 
 
 def dump_json(path: Path, data: Any) -> None:

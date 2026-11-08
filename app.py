@@ -5,7 +5,7 @@ import re
 import shlex
 import sys
 
-from common import USER_PREFS_PATH, load_config, log, resolve_browser, save_user_prefs
+from common import USER_PREFS_PATH, load_config, log, resolve_browser, resolve_path, save_user_prefs
 from main import build_parser, run
 
 BANNER = r"""
@@ -16,7 +16,7 @@ BANNER = r"""
 ░    ░ ░  ·░ ░   ∙░ ░   ░ ░ .  ░ ░   ∙░ ░   ░ ░   ░ ░    ░▄▄▄▄▄▄      ░       ·. ░ ░    ░▄▄▄▄▄▄
 █ .  █ █   █ █ ∙  █ █   █ █    █ █ ∙  █ █   █ █   █ █    .    ·█      █   .      █ █    .    ·█
 █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█      █▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█  
-                  téléchargement automatique d'épisodes  ·  v1.2 by Hinmaka
+                  téléchargement automatique d'épisodes  ·  v1.3 by Hinmaka
 """
 
 
@@ -150,6 +150,13 @@ def main() -> int:
 
         return run_update(with_deps="--deps" in sys.argv)
 
+    if "--repair" in sys.argv[1:]:
+        from repair import run_repair
+
+        rest = [arg for arg in sys.argv[1:] if arg != "--repair"]
+        target = next((arg for arg in rest if not arg.startswith("--")), str(load_config().get("base_output", "")))
+        return run_repair(resolve_path(target), dry_run="--dry-run" in rest)
+
     while True:
         cfg = load_config()
         print(BANNER)
@@ -164,6 +171,7 @@ def main() -> int:
             "  7) Affichage (fenêtre / masquée / headless)\n"
             "  8) Réinitialiser les préférences\n"
             "  9) Mettre à jour depuis GitHub\n"
+            " 10) Réparer les vidéos existantes (seek fluide)\n"
             "  0) Quitter"
         )
         choice = ask("\n  Votre choix")
@@ -295,6 +303,17 @@ def main() -> int:
                 log("  Relance AnimeDL pour charger la nouvelle version.")
             except Exception as exc:
                 log(f"  Mise à jour impossible : {type(exc).__name__}: {exc}")
+
+        elif choice in ("10", "r", "repair"):
+            target = ask("  Dossier à réparer", str(cfg.get("base_output", "")))
+            dry = ask("  Simulation seulement ? (o/N)", "N").strip().lower().startswith("o")
+            try:
+                from repair import run_repair
+
+                log("")
+                run_repair(resolve_path(target), dry_run=dry)
+            except Exception as exc:
+                log(f"  Réparation impossible : {type(exc).__name__}: {exc}")
 
         else:
             log("  Choix invalide.")
