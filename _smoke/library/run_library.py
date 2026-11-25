@@ -4,6 +4,7 @@ from __future__ import annotations
 import contextlib
 import io
 import shutil
+import socket
 import sys
 from pathlib import Path
 
@@ -87,6 +88,24 @@ def main_test() -> int:
         (out_off == "" and out_on == "[debug]\n", "debug silencieux sauf --verbose"),
         (out_log == "[info]\n", "log toujours visible"),
     ])
+
+    # --------------------------------------------------- contournement DNS
+    original_getaddrinfo = main.socket.getaddrinfo
+    main.socket.getaddrinfo = lambda host, port, family: [
+        (socket.AF_INET, 1, 6, "", ("1.2.3.4", port))
+    ]
+    checks.extend([
+        (main.dns_rules(["site.test"], {}) == "MAP site.test 1.2.3.4",
+         "dns : hôte résolu et transmis à Chromium"),
+        (main.dns_rules(["localhost", "127.0.0.1"], {}) is None,
+         "dns : localhost laissé tel quel"),
+        (main.dns_rules(["site.test"], {"dns_map": False}) is None,
+         "dns_map: false respecté"),
+        (main.dns_rules(["site.test"], {"dns_hosts": "cdn.test"})
+         == "MAP site.test 1.2.3.4, MAP cdn.test 1.2.3.4",
+         "dns_hosts : domaines supplémentaires"),
+    ])
+    main.socket.getaddrinfo = original_getaddrinfo
 
     # ------------------------------------------------- suivi hebdo (dry-run)
     weekly = WORK / "weekly.json"

@@ -64,6 +64,12 @@ browser: auto
 # Affichage : window (visible), hidden (hors écran), headless (invisible, souvent bloqué)
 display: window
 
+# Résolveur DNS : Chromium échoue parfois sur ERR_NAME_NOT_RESOLVED alors que
+# curl/Python résolvent normalement. True = on force les hôtes connus vers l'IP
+# résolue par le système ; dns_hosts ajoute des domaines (CDN) à forcer aussi.
+dns_map: true
+dns_hosts: []   # ex: ["cdn.exemple.com", "hls.exemple.com"]
+
 # Serveurs à essayer : "" = auto (tous ceux détectés), sinon "1,2,4"
 sources: ""
 

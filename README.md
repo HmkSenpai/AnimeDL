@@ -317,6 +317,8 @@ les surcharge. Les deux sont fusionnés au démarrage.
 | `min_size_mb` | `1` | Taille minimale d'un fichier valide |
 | `max_sources` | `4` | Repli si aucun serveur n'est détecté sur la page |
 | `browser` | `auto` | `auto`, `chromium`, `chrome`, `brave`, `msedge` |
+| `dns_map` | `true` | Force l'IP résolue par le système dans Chromium si son DNS échoue |
+| `dns_hosts` | `[]` | Domaines supplémentaires à forcer (CDN), séparés par des virgules |
 | `display` | `window` | `window`, `hidden`, `headless` |
 | `sources` | `""` | `""` = tous, sinon `"1,2,4"` |
 | `quality` | `ask` | `ask`, `best`, `worst` ou une hauteur (`720`) |

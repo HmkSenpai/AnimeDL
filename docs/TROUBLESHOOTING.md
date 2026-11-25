@@ -23,6 +23,7 @@ En cas d'échec de capture, `main.py` produit de son côté
 | fichier trop petit / `verify` échoue | flux tronqué, mauvaise variante | relancer avec `--retry-failed` ; le serveur suivant sera essayé |
 | popups à répétition | régie non listée | ajouter ses domaines dans `ad_hosts`, ou utiliser Brave |
 | page « Checking your browser » | protection anti-bot | mode `hidden` plutôt que `headless`, ou navigateur réel (`--browser chrome`) |
+| `Page.goto: net::ERR_NAME_NOT_RESOLVED` | le navigateur lancé par Playwright n'utilise pas le même résolveur que `curl`/Python (souvent plusieurs cartes réseau) | `dns_map: true` (défaut) forces l'hôte vers l'IP résolue par le système ; si un CDN reste en échec, ajoute son domaine dans `dns_hosts: ["cdn.exemple.com"]` ; diagnostic avec `--verbose` (log `[dns] MAP …`) |
 | qualité toujours la même | choix mémorisé | supprimer `.progress.json` du dossier série, ou `--quality 1080` |
 | **É02 contient É01** (image identique, autre qualité) | le player n'a pas changé d'épisode, ou la page a redirigé | le script recharge la page puis refuse le cas (empreinte du flux **et** comparaison des pixels du fichier via `content.py`) |
 | ancien doublon toujours accepté | `.progress.json` date d'avant les empreintes : les épisodes `done` n'ont pas de `content_hash` | l'empreinte visuelle est calculée automatiquement au démarrage pour ces épisodes ; pour un fichier déjà faux, `--redo N` le supprime puis le retélécharge |

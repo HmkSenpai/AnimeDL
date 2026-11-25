@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import re
 import shutil
+import socket
 import sys
 import time
 from pathlib import Path
@@ -113,7 +114,49 @@ def choose_quality(cap, args, cfg: dict, progress: Progress) -> str:
     return "best"
 
 
-def launch_context(pw, cfg: dict, *, fresh_profile: bool = False, hidden: bool = False):
+def dns_rules(hosts: list[str], cfg: dict | None = None) -> str | None:
+    """Règles Chromium MAP host->IP quand son résolveur DNS échoue.
+
+    Sur certaines machines, Chromium (même Brave piloté par Playwright) renvoie
+    `ERR_NAME_NOT_RESOLVED` alors que le DNS système fonctionne (curl, Python).
+    On résout les hôtes connus côté Python et on les passe à Chromium : le nom
+    d'hôte et le SNI TLS restent les bons, seule l'adresse IP est forcée.
+    """
+    cfg = cfg or {}
+    if cfg.get("dns_map") is False:
+        return None
+    extra = cfg.get("dns_hosts") or []
+    if isinstance(extra, str):
+        extra = [h.strip() for h in extra.split(",") if h.strip()]
+    names: list[str] = []
+    for host in [*hosts, *extra]:
+        host = str(host or "").strip().lower().rstrip(".")
+        if host and host not in names and host not in ("localhost", "127.0.0.1", "::1"):
+            names.append(host)
+    rules: list[str] = []
+    for host in names:
+        try:
+            infos = socket.getaddrinfo(host, 443, socket.AF_INET)
+        except (socket.gaierror, OSError):
+            continue
+        ips: list[str] = []
+        for info in infos:
+            ip = info[4][0]
+            if ip not in ips:
+                ips.append(ip)
+        if ips:
+            rules.append(f"MAP {host} {ips[0]}")
+    return ", ".join(rules) if rules else None
+
+
+def launch_context(
+    pw,
+    cfg: dict,
+    *,
+    fresh_profile: bool = False,
+    hidden: bool = False,
+    hosts: list[str] | None = None,
+):
     """Ouvre le profil navigateur persistant (avec repli Chromium)."""
     user_data = resolve_path(cfg["user_data_dir"])
     if fresh_profile and user_data.exists():
@@ -128,6 +171,11 @@ def launch_context(pw, cfg: dict, *, fresh_profile: bool = False, hidden: bool =
     if hidden:
         # fenêtre réelle (moins détectable) mais placée hors écran
         launch_kwargs["args"] += ["--window-position=-32000,-32000", "--start-minimized"]
+
+    mapping = dns_rules(hosts or [], cfg)
+    if mapping:
+        launch_kwargs["args"].append(f"--host-resolver-rules={mapping}")
+        debug(f"[dns] {mapping}")
 
     browser = resolve_browser(str(cfg.get("browser") or "auto"))
     if browser == "chromium":
@@ -157,7 +205,10 @@ def peek_series(url: str, cfg: dict | None = None) -> tuple[str, list]:
     pattern = re.compile(local_cfg["episode_pattern"])
 
     with sync_playwright() as pw:
-        ctx = launch_context(pw, local_cfg, hidden=(display == "hidden"))
+        ctx = launch_context(
+            pw, local_cfg, hidden=(display == "hidden"),
+            hosts=[urlparse(url).hostname],
+        )
         try:
             page = ctx.pages[0] if ctx.pages else ctx.new_page()
             raw_title, episodes = collect_episodes(
@@ -189,7 +240,10 @@ def run(args: argparse.Namespace) -> int:
         cfg["browser"] = args.browser
 
     with sync_playwright() as pw:
-        ctx = launch_context(pw, cfg, fresh_profile=args.fresh_profile, hidden=hidden)
+        ctx = launch_context(
+            pw, cfg, fresh_profile=args.fresh_profile, hidden=hidden,
+            hosts=[urlparse(args.url).hostname],
+        )
 
         capturer = ManifestCapture(ctx, cfg)
         page = capturer.ensure_page()

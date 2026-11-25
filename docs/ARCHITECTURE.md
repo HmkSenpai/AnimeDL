@@ -132,6 +132,15 @@ plus un troisième qui ne regarde plus l'URL mais le contenu :
 `.browser-profile` conserve cookies, session et éventuel challenge anti-bot.
 `--fresh-profile` le supprime, ce qui coûte une reconnexion mais repart propre.
 
+### Résolution DNS du navigateur
+
+Sur certaines machines, Chromium (y compris Brave piloté par Playwright)
+renvoie `ERR_NAME_NOT_RESOLVED` alors que le DNS système fonctionne.
+`main.dns_rules()` résout l'hôte de la série côté Python et transmet
+`--host-resolver-rules=MAP hôte IP` au lancement : le nom d'hôte et le SNI TLS
+restent corrects, seule l'adresse est forcée. `dns_hosts` ajoute les domaines
+CDN ; `dns_map: false` désactive le mécanisme.
+
 ### Journal utilisateur vs développeur
 
 `common.log()` est le canal utilisateur (état des épisodes, succès, erreurs) ;
