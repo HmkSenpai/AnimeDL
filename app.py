@@ -16,7 +16,7 @@ BANNER = r"""
 ░    ░ ░  ·░ ░   ∙░ ░   ░ ░ .  ░ ░   ∙░ ░   ░ ░   ░ ░    ░▄▄▄▄▄▄      ░       ·. ░ ░    ░▄▄▄▄▄▄
 █ .  █ █   █ █ ∙  █ █   █ █    █ █ ∙  █ █   █ █   █ █    .    ·█      █   .      █ █    .    ·█
 █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄▄█ █▄▄▄▄█ █▄▄▄█ █▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█      █▄▄▄▄▄▄▄▄▄▄█ █▄▄▄▄▄▄▄▄▄▄█  
-                  téléchargement automatique d'épisodes  ·  v1.3 by Hinmaka
+                  téléchargement automatique d'épisodes  ·  v1.4 by Hinmaka
 """
 
 
@@ -145,6 +145,11 @@ def run_download(raw: str, dry_run: bool = False) -> None:
 
 
 def main() -> int:
+    if "--verbose" in sys.argv[1:]:
+        from common import set_verbose
+
+        set_verbose(True)
+
     if "--update" in sys.argv[1:]:
         from update import run_update
 
@@ -156,6 +161,16 @@ def main() -> int:
         rest = [arg for arg in sys.argv[1:] if arg != "--repair"]
         target = next((arg for arg in rest if not arg.startswith("--")), str(load_config().get("base_output", "")))
         return run_repair(resolve_path(target), dry_run="--dry-run" in rest)
+
+    if "--weekly" in sys.argv[1:]:
+        from library import run_latest
+
+        return run_latest(load_config(), dry_run="--dry-run" in sys.argv[1:])
+
+    if "--resume" in sys.argv[1:]:
+        from library import run_resume
+
+        return run_resume(load_config())
 
     while True:
         cfg = load_config()
@@ -172,6 +187,11 @@ def main() -> int:
             "  8) Réinitialiser les préférences\n"
             "  9) Mettre à jour depuis GitHub\n"
             " 10) Réparer les vidéos existantes (seek fluide)\n"
+            " 11) Suivi hebdo : ajouter une série\n"
+            " 12) Suivi hebdo : retirer une série\n"
+            " 13) Suivi hebdo : récupérer les derniers épisodes\n"
+            " 14) Reprendre un téléchargement interrompu\n"
+            " 15) Nettoyer le titre (préfixe / suffixe)\n"
             "  0) Quitter"
         )
         choice = ask("\n  Votre choix")
@@ -314,6 +334,51 @@ def main() -> int:
                 run_repair(resolve_path(target), dry_run=dry)
             except Exception as exc:
                 log(f"  Réparation impossible : {type(exc).__name__}: {exc}")
+
+        elif choice in ("11", "watch-add"):
+            url = ask("  URL de la série à suivre")
+            if url:
+                from library import watch_add
+
+                log("  " + watch_add(url))
+
+        elif choice in ("12", "watch-remove"):
+            from library import ask_index, load_watchlist, watch_remove
+
+            entries = load_watchlist()
+            if not entries:
+                log("  Liste vide.")
+            else:
+                for i, entry in enumerate(entries, 1):
+                    log(f"  {i}) {entry.get('name') or entry['url']}")
+                index = ask_index("  Numéro à retirer (q = annuler) : ", len(entries))
+                if index:
+                    log("  " + watch_remove(index))
+
+        elif choice in ("13", "weekly"):
+            from library import run_latest
+
+            dry = ask("  Simulation seulement ? (o/N)", "N").strip().lower().startswith("o")
+            try:
+                log("")
+                run_latest(cfg, dry_run=dry)
+            except Exception as exc:
+                log(f"  Suivi hebdo impossible : {type(exc).__name__}: {exc}")
+
+        elif choice in ("14", "resume"):
+            from library import run_resume
+
+            try:
+                log("")
+                run_resume(cfg)
+            except Exception as exc:
+                log(f"  Reprise impossible : {type(exc).__name__}: {exc}")
+
+        elif choice == "15":
+            prefix = ask("  Préfixe à retirer (vide = aucun)", str(cfg.get("title_prefix", "")))
+            suffix = ask("  Suffixe à retirer (vide = aucun)", str(cfg.get("title_suffix", "")))
+            save_user_prefs({"title_prefix": prefix, "title_suffix": suffix})
+            log(f"  Préfixe : {prefix or '(aucun)'} — suffixe : {suffix or '(aucun)'}")
 
         else:
             log("  Choix invalide.")

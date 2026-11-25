@@ -16,6 +16,19 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "config.yaml"
 USER_PREFS_PATH = ROOT / "user.yaml"
 
+# Journal « utilisateur » (par défaut) vs « développeur » (--verbose / verbose: true)
+_VERBOSE = os.environ.get("ANIMEDL_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def set_verbose(value: bool) -> None:
+    """Active ou non les messages de diagnostic (clics, candidats HLS, URLs)."""
+    global _VERBOSE
+    _VERBOSE = bool(value)
+
+
+def is_verbose() -> bool:
+    return _VERBOSE
+
 # Console Windows (cp1252) : force UTF-8 pour les accents et flèches des logs
 for _stream in (sys.stdout, sys.stderr):
     try:
@@ -26,6 +39,12 @@ for _stream in (sys.stdout, sys.stderr):
 
 def log(msg: str) -> None:
     print(msg, flush=True)
+
+
+def debug(msg: str) -> None:
+    """Message réservé au mode développeur (`--verbose` / `verbose: true`)."""
+    if _VERBOSE:
+        log(msg)
 
 
 def status_line(text: str) -> None:
@@ -267,7 +286,7 @@ def ensure_mp4(path: Path, enabled: bool = True) -> Path:
         log(f"[mux] ⚠ remux impossible ({exc}) — fichier laissé tel quel")
         return path
 
-    log(f"[mux] MP4 indexé + faststart — {path.stat().st_size / 1048576:.1f} Mo")
+    debug(f"[mux] MP4 indexé + faststart — {path.stat().st_size / 1048576:.1f} Mo")
     return path
 
 

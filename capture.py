@@ -19,7 +19,7 @@ from playwright.sync_api import BrowserContext, Frame, Page, TimeoutError as PWT
 
 import hls
 from adblock import AD_HOST_HINTS, AD_PATH_HINTS
-from common import ROOT, log
+from common import ROOT, debug, log
 from hls import Variant
 
 M3U8_HINTS = (".m3u8", "m3u8")
@@ -227,7 +227,7 @@ class ManifestCapture:
                     for el in frame.query_selector_all(selector):
                         if el.is_visible():
                             el.click(timeout=700)
-                            log(f"[capture] popup fermée ({selector})")
+                            debug(f"[capture] popup fermée ({selector})")
                 except Exception:
                     continue
 
@@ -241,7 +241,7 @@ class ManifestCapture:
                     for el in frame.query_selector_all(selector):
                         if el.is_visible():
                             el.click(timeout=1500, force=True)
-                            log(f"[capture] clic play ({selector})")
+                            debug(f"[capture] clic play ({selector})")
                             clicked = True
                             break
                 except Exception:
@@ -260,7 +260,7 @@ class ManifestCapture:
                     for el in frame.query_selector_all("[data-adl-play]"):
                         if el.is_visible():
                             el.click(timeout=1500, force=True)
-                            log(f"[capture] clic play (heuristique: {str(cand.get('cls', ''))[:40]})")
+                            debug(f"[capture] clic play (heuristique: {str(cand.get('cls', ''))[:40]})")
                             clicked = True
                             break
                 except Exception:
@@ -281,7 +281,7 @@ class ManifestCapture:
                         for el in frame.query_selector_all("[data-adl-player]"):
                             if el.is_visible():
                                 el.click(timeout=1500, force=True)
-                                log(f"[capture] clic conteneur player ({str(cand.get('cls', ''))[:40]})")
+                                debug(f"[capture] clic conteneur player ({str(cand.get('cls', ''))[:40]})")
                                 clicked = True
                                 break
                     except Exception:
@@ -299,7 +299,7 @@ class ManifestCapture:
                         box = video.bounding_box()
                         if box and box["width"] > 20 and box["height"] > 20:
                             self.page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                            log("[capture] clic au centre de la vidéo")
+                            debug("[capture] clic au centre de la vidéo")
                             clicked = True
                             break
                 except Exception:
@@ -314,7 +314,7 @@ class ManifestCapture:
                         best = box
                 if best and best["width"] > 100:
                     self.page.mouse.click(best["x"] + best["width"] / 2, best["y"] + best["height"] / 2)
-                    log("[capture] clic au centre de l'iframe")
+                    debug("[capture] clic au centre de l'iframe")
                     clicked = True
             except Exception:
                 pass
@@ -352,13 +352,13 @@ class ManifestCapture:
                 chosen = max(selects, key=lambda s: len(s.get("options") or []))
                 self.sources = [str(o) for o in chosen.get("options") or []]
                 self._select_handle = (frame, int(chosen.get("marker", 0)))
-                log(f"[serveurs] {len(self.sources)} détecté(s) : {self.sources}")
+                debug(f"[serveurs] {len(self.sources)} détecté(s) : {self.sources}")
                 return self.sources
             tabs = data.get("tabs") or []
             if len(tabs) > 1:
                 self.sources = [str(t) for t in tabs]
                 self._tabs_frame = frame
-                log(f"[serveurs] {len(self.sources)} onglet(s) : {self.sources}")
+                debug(f"[serveurs] {len(self.sources)} onglet(s) : {self.sources}")
                 return self.sources
         return self.sources
 
@@ -379,10 +379,10 @@ class ManifestCapture:
                 if el:
                     el.select_option(index=index)
                     label = self.sources[index] if index < len(self.sources) else str(index)
-                    log(f"[serveurs] sélection : {label}")
+                    debug(f"[serveurs] sélection : {label}")
                     return True
             except Exception as exc:
-                log(f"[serveurs] select impossible ({exc})")
+                debug(f"[serveurs] select impossible ({exc})")
 
         # 2) onglets / menu déroulant custom
         if self._tabs_frame:
@@ -396,7 +396,7 @@ class ManifestCapture:
                         els = frame.query_selector_all("[data-adl-tab]")
                     if index < len(els):
                         els[index].click(timeout=2500, force=True)
-                        log(f"[serveurs] onglet cliqué : {self.sources[index]}")
+                        debug(f"[serveurs] onglet cliqué : {self.sources[index]}")
                         return True
             except Exception:
                 pass
@@ -410,7 +410,7 @@ class ManifestCapture:
                     loc = frame.get_by_text(wanted, exact=False)
                     if loc.count():
                         loc.first.click(timeout=3000)
-                        log(f"[serveurs] sélection config : {wanted}")
+                        debug(f"[serveurs] sélection config : {wanted}")
                         return True
                 except Exception:
                     continue
@@ -420,12 +420,12 @@ class ManifestCapture:
                 loc = self.page.locator(selector).nth(index)
                 if loc.count():
                     loc.click(timeout=3000)
-                    log(f"[serveurs] sélection ({selector})")
+                    debug(f"[serveurs] sélection ({selector})")
                     return True
             except Exception:
                 continue
 
-        log(f"[serveurs] bascule #{index + 1} impossible")
+        debug(f"[serveurs] bascule #{index + 1} impossible")
         return False
 
     # -------------------------------------------------------- validation HLS
@@ -469,12 +469,12 @@ class ManifestCapture:
             headers = self._headers_for(seen.url, seen.referer)
             info = hls.inspect(seen.url, headers)
             if info is None:
-                log(f"[hls] manifest invalide/expiré ignoré : {seen.url[:90]}")
+                debug(f"[hls] manifest invalide/expiré ignoré : {seen.url[:90]}")
                 continue
             dur = info.duration or 0.0
-            log(f"[hls] candidat valide — durée {dur:.0f}s — {seen.url[:90]}")
+            debug(f"[hls] candidat valide — durée {dur:.0f}s — {seen.url[:90]}")
             if info.variants:
-                log("[hls] qualités : " + ", ".join(f"{v.label} ({v.bitrate})" for v in info.variants))
+                debug("[hls] qualités : " + ", ".join(f"{v.label} ({v.bitrate})" for v in info.variants))
             cand = CaptureResult(
                 url=info.url,
                 referer=headers.get("Referer", ""),
@@ -502,13 +502,13 @@ class ManifestCapture:
             masters = [c for c in candidates if len(c.variants) > 1]
             if masters:
                 chosen = max(masters, key=lambda c: len(c.variants))
-                log(f"[hls] master retenu ({len(chosen.variants)} qualités) — le choix de qualité s'applique")
+                debug(f"[hls] master retenu ({len(chosen.variants)} qualités) — le choix de qualité s'applique")
                 return chosen
             log("[hls] flux unique (aucune variante) — la qualité ne peut pas être modifiée")
             return candidates[0]
 
         if best is not None:
-            log(f"[hls] aucun manifest ≥ {min_dur:.0f}s ; le plus long vu : {best_dur:.0f}s (pub ?)")
+            debug(f"[hls] aucun manifest ≥ {min_dur:.0f}s ; le plus long vu : {best_dur:.0f}s (pub ?)")
         return None
 
     # ---------------------------------------------------------------- rapport
@@ -535,9 +535,9 @@ class ManifestCapture:
             except Exception:
                 continue
         report.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
-        log(f"[capture] rapport d'échec : {report}")
+        debug(f"[capture] rapport d'échec : {report}")
         if shot.exists():
-            log(f"[capture] screenshot : {shot}")
+            debug(f"[capture] screenshot : {shot}")
         return report
 
     # ---------------------------------------------------------------- capture
@@ -572,7 +572,7 @@ class ManifestCapture:
         if not final or self._canonical(final) == self._canonical(requested):
             return True
 
-        log(f"[capture] page finale différente : {final[:120]}")
+        debug(f"[capture] page finale différente : {final[:120]}")
         want, got = self._episode_number(requested), self._episode_number(final)
         if want is not None and got is not None and want != got:
             log(f"[capture] E{want:02d} demandé mais E{got:02d} affiché — capture annulée")
@@ -594,11 +594,11 @@ class ManifestCapture:
         self.ensure_page()
 
         if not self._same_episode_loaded(episode_url):
-            log(f"[capture] navigation -> {episode_url}")
+            debug(f"[capture] navigation -> {episode_url}")
             try:
                 self.page.goto(episode_url, wait_until="domcontentloaded", timeout=60_000)
             except PWTimeout:
-                log("[capture] timeout de chargement de la page")
+                debug("[capture] timeout de chargement de la page")
                 self._dump_report(tag)
                 return None
             try:
@@ -615,7 +615,7 @@ class ManifestCapture:
                 self._select_source(source_index)
                 self.page.wait_for_timeout(2500)
         else:
-            log(f"[capture] bascule vers le serveur #{source_index + 1}")
+            debug(f"[capture] bascule vers le serveur #{source_index + 1}")
             self._select_source(source_index)
             self.page.wait_for_timeout(2500)
 
@@ -639,7 +639,7 @@ class ManifestCapture:
                 next_check = 10
                 hit = self._evaluate_candidates()
                 if hit:
-                    log(f"[capture] manifest retenu : {hit.url[:110]}…")
+                    debug(f"[capture] manifest retenu : {hit.url[:110]}…")
                     return hit
 
             next_click -= 1
@@ -648,7 +648,7 @@ class ManifestCapture:
                 self._click_play_everywhere()
                 next_click = 20
 
-        log(f"[capture] aucun manifest exploitable après {timeout_s}s (source #{source_index + 1})")
+        debug(f"[capture] aucun manifest exploitable après {timeout_s}s (source #{source_index + 1})")
         self._dump_report(tag)
         return None
 

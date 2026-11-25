@@ -12,7 +12,7 @@ from typing import Any
 
 import yt_dlp
 
-from common import end_status, ensure_mp4, ffmpeg_exe, log, status_line
+from common import debug, end_status, ensure_mp4, ffmpeg_exe, log, status_line
 
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)")
 _RESOLUTION_RE = re.compile(r"Video:.*?(\d{2,5})x(\d{2,5})")
@@ -103,7 +103,7 @@ def _progress_printer(prefix: str):
                 )
         elif d.get("status") == "finished":
             end_status()
-            log(f"   {prefix} 100% — assemblage/mux ffmpeg…")
+            debug(f"   {prefix} 100% — assemblage/mux ffmpeg…")
 
     return hook
 
@@ -165,7 +165,7 @@ def _download_once(
         options["cookiesfrombrowser"] = (cookies,)
 
     shown = out_template.name.replace(".%(ext)s", "")
-    log(f"[dl] {shown} ← {url[:100]}")
+    debug(f"[dl] {shown} ← {url[:100]}")
     started = time.time()
     with yt_dlp.YoutubeDL(options) as ydl:
         info = ydl.extract_info(url, download=True)

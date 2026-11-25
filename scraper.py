@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 
 from playwright.sync_api import Page
 
-from common import log
+from common import debug
 
 
 @dataclass
@@ -23,6 +24,32 @@ class Episode:
 
 
 _TRACKING_KEYS = ("utm_", "fbclid", "gclid", "yclid", "mc_cid", "mc_eid", "referrer", "ref")
+
+
+def _patterns(value: Any) -> list[str]:
+    """Accepte une chaîne (séparée par `|`) ou une liste de préfixes/suffixes."""
+    if not value:
+        return []
+    items = value if isinstance(value, (list, tuple)) else str(value).split("|")
+    return [str(item).strip() for item in items if str(item).strip()]
+
+
+def clean_title(title: str, cfg: dict[str, Any] | None = None) -> str:
+    """Retire le préfixe et/ou le suffixe configurés du titre de la série.
+
+    `title_prefix: "Regarder maintenant "` et `title_suffix: "site.com"` transforment
+    `Regarder maintenant [Mon anime] site.com` en `[Mon anime]`, utilisé ensuite
+    pour le dossier de sortie et les noms de fichiers.
+    """
+    out = re.sub(r"\s+", " ", (title or "").strip())
+    cfg = cfg or {}
+    for prefix in _patterns(cfg.get("title_prefix")):
+        if out.lower().startswith(prefix.lower()):
+            out = out[len(prefix):].strip(" \t-–—:|[]")
+    for suffix in _patterns(cfg.get("title_suffix")):
+        if out.lower().endswith(suffix.lower()):
+            out = out[:-len(suffix)].strip(" \t-–—:|[]")
+    return out or "serie"
 
 
 def clean_href(href: str) -> str:
@@ -86,7 +113,7 @@ def collect_episodes(
 ) -> tuple[str, list[Episode]]:
     """Ouvre la série (ou l'épisode donné) et renvoie (titre, épisodes triés)."""
     target = series_url_from(url, pattern)
-    log(f"[scraper] ouverture de la page série : {target}")
+    debug(f"[scraper] ouverture de la page série : {target}")
     page.goto(target, wait_until="domcontentloaded", timeout=60_000)
     page.wait_for_timeout(1500)
 
@@ -96,7 +123,7 @@ def collect_episodes(
     if not any(pattern.search(urlparse(h).path) for h, _ in links):
         # La page série ne liste rien (ou URL d'épisode seule) : on scanne la page fournie.
         if target != url:
-            log("[scraper] aucun épisode sur la page série, scan de l'URL fournie...")
+            debug("[scraper] aucun épisode sur la page série, scan de l'URL fournie...")
             page.goto(url, wait_until="domcontentloaded", timeout=60_000)
             page.wait_for_timeout(1200)
             links += _collect_links(page)
@@ -127,5 +154,5 @@ def collect_episodes(
         by_number[n].get(preferred) or by_number[n].get(other) or next(iter(by_number[n].values()))
         for n in sorted(by_number)
     ]
-    log(f"[scraper] {len(episodes)} épisode(s) trouvé(s) — {title}")
+    debug(f"[scraper] {len(episodes)} épisode(s) trouvé(s) — {title}")
     return title, episodes

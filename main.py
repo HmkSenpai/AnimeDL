@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
 import time
 
@@ -19,6 +20,7 @@ from playwright.sync_api import sync_playwright
 from adblock import AdBlocker
 from capture import ManifestCapture
 from common import (
+    debug,
     die,
     ensure_space,
     ffmpeg_exe,
@@ -28,10 +30,12 @@ from common import (
     resolve_browser,
     resolve_path,
     safe_filename,
+    set_verbose,
 )
 from downloader import DownloadError, cleanup_failed, download, verify
+from library import session_finish, session_start
 from progress import Progress
-from scraper import collect_episodes
+from scraper import clean_title, collect_episodes
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,6 +54,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--min-duration", type=float, help="Durée minimale acceptée (s)")
     p.add_argument("--min-size-mb", type=float, help="Taille minimale acceptée (Mo)")
     p.add_argument("--fresh-profile", action="store_true", help="Ignorer le profil navigateur existant")
+    p.add_argument("--verbose", action="store_true",
+                   help="Afficher les détails techniques (clics, serveurs, candidats HLS)")
     p.add_argument("--browser", default="",
                    choices=["", "auto", "chromium", "chrome", "brave", "msedge"],
                    help="Navigateur à piloter (auto = navigateur déjà installé)")
@@ -104,8 +110,64 @@ def choose_quality(cap, args, cfg: dict, progress: Progress) -> str:
     return "best"
 
 
+def launch_context(pw, cfg: dict, *, fresh_profile: bool = False, hidden: bool = False):
+    """Ouvre le profil navigateur persistant (avec repli Chromium)."""
+    user_data = resolve_path(cfg["user_data_dir"])
+    if fresh_profile and user_data.exists():
+        shutil.rmtree(user_data, ignore_errors=True)
+
+    launch_kwargs: dict = {
+        "headless": bool(cfg.get("headless")),
+        "viewport": {"width": 1280, "height": 800},
+        "args": ["--disable-blink-features=AutomationControlled"],
+        "ignore_default_args": ["--enable-automation"],
+    }
+    if hidden:
+        # fenêtre réelle (moins détectable) mais placée hors écran
+        launch_kwargs["args"] += ["--window-position=-32000,-32000", "--start-minimized"]
+
+    browser = resolve_browser(str(cfg.get("browser") or "auto"))
+    if browser == "chromium":
+        debug("[navigateur] chromium embarqué (Playwright)")
+    else:
+        debug(f"[navigateur] {browser} déjà installé — aucun téléchargement")
+
+    try:
+        channel_kwargs = dict(launch_kwargs)
+        channel_kwargs.update(browser_launch_options(browser))
+        ctx = pw.chromium.launch_persistent_context(str(user_data), **channel_kwargs)
+    except Exception as exc:
+        if browser == "chromium":
+            raise
+        log(f"[navigateur] échec avec {browser} ({type(exc).__name__}) — repli sur chromium")
+        ctx = pw.chromium.launch_persistent_context(str(user_data), **launch_kwargs)
+    ctx.set_default_timeout(30_000)
+    return ctx
+
+
+def peek_series(url: str, cfg: dict | None = None) -> tuple[str, list]:
+    """Lit seulement la page série : titre nettoyé + épisodes (pour le suivi hebdo)."""
+    local_cfg = dict(cfg or load_config())
+    display = str(local_cfg.get("display") or "window").lower()
+    if display == "headless":
+        local_cfg["headless"] = True
+    pattern = re.compile(local_cfg["episode_pattern"])
+
+    with sync_playwright() as pw:
+        ctx = launch_context(pw, local_cfg, hidden=(display == "hidden"))
+        try:
+            page = ctx.pages[0] if ctx.pages else ctx.new_page()
+            raw_title, episodes = collect_episodes(
+                page, url, pattern, bool(local_cfg.get("prefer_vf"))
+            )
+        finally:
+            ctx.close()
+    return clean_title(raw_title, local_cfg), episodes
+
+
 def run(args: argparse.Namespace) -> int:
     cfg = load_config()
+    set_verbose(bool(getattr(args, "verbose", False)) or bool(cfg.get("verbose")))
     display = str(cfg.get("display") or "window").lower()
     if args.headless or display == "headless":
         cfg["headless"] = True
@@ -119,50 +181,22 @@ def run(args: argparse.Namespace) -> int:
     ffmpeg_exe()  # échoue tôt si absent
 
     pattern = re.compile(cfg["episode_pattern"])
-    user_data = resolve_path(cfg["user_data_dir"])
-    if args.fresh_profile and user_data.exists():
-        import shutil
-
-        shutil.rmtree(user_data, ignore_errors=True)
-
     sources_order = [int(x) - 1 for x in re.findall(r"\d+", args.sources)] or None
-
-    requested = args.browser or str(cfg.get("browser") or "auto")
-    browser = resolve_browser(requested)
-    if browser == "chromium":
-        log("[navigateur] chromium embarqué (Playwright)")
-    else:
-        log(f"[navigateur] {browser} déjà installé — aucun téléchargement")
+    if args.browser:
+        cfg["browser"] = args.browser
 
     with sync_playwright() as pw:
-        launch_kwargs: dict = {
-            "headless": bool(cfg["headless"]),
-            "viewport": {"width": 1280, "height": 800},
-            "args": ["--disable-blink-features=AutomationControlled"],
-            "ignore_default_args": ["--enable-automation"],
-        }
-        if hidden:
-            # fenêtre réelle (moins détectable) mais placée hors écran
-            launch_kwargs["args"] += ["--window-position=-32000,-32000", "--start-minimized"]
-
-        try:
-            channel_kwargs = dict(launch_kwargs)
-            channel_kwargs.update(browser_launch_options(browser))
-            ctx = pw.chromium.launch_persistent_context(str(user_data), **channel_kwargs)
-        except Exception as exc:
-            if browser == "chromium":
-                raise
-            log(f"[navigateur] échec avec {browser} ({type(exc).__name__}) — repli sur chromium")
-            browser = "chromium"
-            ctx = pw.chromium.launch_persistent_context(str(user_data), **launch_kwargs)
-        ctx.set_default_timeout(30_000)
+        ctx = launch_context(pw, cfg, fresh_profile=args.fresh_profile, hidden=hidden)
 
         capturer = ManifestCapture(ctx, cfg)
         page = capturer.ensure_page()
         blocker = AdBlocker(ctx, cfg)
         blocker.install(lambda p: p is page)
 
-        title, episodes = collect_episodes(page, args.url, pattern, cfg["prefer_vf"])
+        raw_title, episodes = collect_episodes(page, args.url, pattern, cfg["prefer_vf"])
+        title = clean_title(raw_title, cfg)
+        if title != (raw_title or "").strip():
+            debug(f"[titre] {raw_title!r} -> {title!r}")
         if not episodes:
             ctx.close()
             die("aucun épisode détecté — vérifie l'URL ou le motif `episode_pattern` du config.yaml")
@@ -172,16 +206,27 @@ def run(args: argparse.Namespace) -> int:
         if args.limit:
             episodes = episodes[: args.limit]
 
-        log("\nÉpisodes détectés :")
+        debug("\nÉpisodes détectés :")
         for ep in episodes:
-            log(f"  E{ep.code}  [{ep.lang}]  {ep.url}")
+            debug(f"  E{ep.code}  [{ep.lang}]  {ep.url}")
         if args.dry_run:
+            log(f"{len(episodes)} épisode(s) détecté(s) :")
+            for ep in episodes:
+                log(f"  E{ep.code} [{ep.lang}] {ep.url}")
             ctx.close()
             return 0
 
         out_dir = resolve_path(cfg["base_output"]) / safe_filename(title or "serie")
         ensure_space(float(cfg["min_free_gb"]), out_dir)
         progress = Progress(title, out_dir / ".progress.json")
+        session_start(
+            args.url,
+            title,
+            str(out_dir),
+            str(progress.path),
+            len(episodes),
+            dict(vars(args)),
+        )
         if args.retry_failed:
             progress.clear_failed()
         for number in args.redo or []:
@@ -202,10 +247,11 @@ def run(args: argparse.Namespace) -> int:
 
         for ep in episodes:
             if progress.is_done(ep.code):
-                log(f"\n=== E{ep.code} — déjà téléchargé, skiper ===")
+                log(f"[E{ep.code}] déjà présent — ignoré")
                 continue
 
-            log(f"\n=== E{ep.code} [{ep.lang}] {ep.url} ===")
+            log(f"[E{ep.code}] téléchargement…")
+            debug(f"  URL : {ep.url} [{ep.lang}]")
             ensure_space(float(cfg["min_free_gb"]), out_dir)
             out_template = out_dir / f"{safe_filename(title)} - S01E{ep.code}.%(ext)s"
             ok = False
@@ -216,7 +262,7 @@ def run(args: argparse.Namespace) -> int:
             reload_done = False
             while pos < len(order):
                 source_index = order[pos]
-                log(f"\n--- Source #{source_index + 1} ---")
+                debug(f"\n--- Source #{source_index + 1} ---")
                 cap = capturer.capture(ep.url, source_index, tag=f"E{ep.code}")
 
                 # découverte dynamique : autant de serveurs que le site en propose
@@ -290,13 +336,25 @@ def run(args: argparse.Namespace) -> int:
         ctx.close()
 
     log("\n================ RÉSUMÉ ================")
-    log(f"  Anti-pub : {blocker.summary()}")
+    debug(f"  Anti-pub : {blocker.summary()}")
     log(f"  Qualité : {quality or 'best'}")
-    for code, path in results:
-        log(f"  E{code} -> {path}")
     log(f"  État global : {progress.summary()}")
+    for code, path in results:
+        debug(f"  E{code} -> {path}")
     if failures:
         log("  Relance avec --retry-failed pour rejouer les épisodes en échec.")
+    done_total = sum(1 for ep in episodes if progress.is_done(ep.code))
+    failed_codes = [
+        code for code, entry in progress.data["episodes"].items()
+        if entry.get("status") == "failed"
+    ]
+    session_finish(
+        args.url,
+        "termine" if failures == 0 else "echoue",
+        done_total,
+        failed_codes,
+        len(episodes),
+    )
     return 0 if not failures else 1
 
 

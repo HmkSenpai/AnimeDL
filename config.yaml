@@ -70,6 +70,17 @@ sources: ""
 # Qualité : "ask" (demande au 1er épisode), "best", "worst", ou une hauteur (ex: "720")
 quality: ask
 
+# Journalisation : false = strict minimum (épisode, téléchargement, erreurs).
+# true = détails développeur (clics Play, candidats HLS, URLs, source choisie).
+# Équivalent CLI : --verbose ; variable d'environnement : ANIMEDL_DEBUG=1
+verbose: false
+
+# Nettoyage du titre utilisé pour le dossier et les fichiers.
+# Accepte une chaîne ou plusieurs valeurs séparées par "|" (comparaison insensible à la casse).
+# Ex : "Regarder maintenant " et "site.com" -> "Regarder maintenant [Mon anime] site.com" devient "[Mon anime]"
+title_prefix: ""
+title_suffix: ""
+
 # Validation du manifest capté (filtre anti-pub)
 min_manifest_duration_s: 60  # une vidéo plus courte est considérée comme une pub
 allow_unknown_duration: false

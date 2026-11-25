@@ -1,6 +1,8 @@
 .browser-profile/
 .venv/
 user.yaml
+watchlist.json
+sessions.json
 logs/
 _smoke/hls/
 _smoke/out/
@@ -20,6 +22,7 @@ _smoke/sources/.profile/
 _smoke/browsers/.profile/
 _smoke/episodes/.media/
 _smoke/episodes/.profile/
+_smoke/library/.work/
 _smoke/master/.media/
 _smoke/master/.profile/
 __pycache__/

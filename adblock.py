@@ -5,7 +5,7 @@ from typing import Any, Callable
 
 from playwright.sync_api import BrowserContext, Page, Route, Request
 
-from common import log
+from common import debug, log
 
 # Hôtes de régies publicitaires (sous-chaîne, en minuscules)
 AD_HOST_HINTS = (
@@ -55,7 +55,7 @@ class AdBlocker:
         self.ctx.route("**/*", self._route)
         self.ctx.on("page", lambda page: self._on_page(page, is_own))
         self.ctx.add_init_script(JS_KILL_POPUPS)
-        log("[adblock] protection active (régies + popups)")
+        debug("[adblock] protection active (régies + popups)")
 
     def _is_ad(self, request: Request) -> bool:
         url = request.url.lower()
@@ -83,7 +83,7 @@ class AdBlocker:
         self.closed_popups += 1
         try:
             page.close()
-            log("[adblock] popup fermée")
+            debug("[adblock] popup fermée")
         except Exception:
             pass
 

@@ -55,7 +55,16 @@ ignore les publicités et reprend là où il s'est arrêté.
   yt-dlp peut laisser un MPEG-TS dans un `.mp4`, ce qui provoque des freezes de
   3-5 s à chaque déplacement dans la timeline.
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
-  rejoue les échecs.
+  rejoue les échecs. Les séries interrompues sont aussi listées dans `sessions.json`
+  (option **14** du menu) pour reprendre sans retaper l'URL ni les options.
+- **Suivi hebdomadaire** : une liste de séries (option **11**) et une touche
+  (option **13**) ne récupère que le **dernier épisode** de chacune ; un épisode
+  déjà présent est annoncé « pas encore sorti ».
+- **Titre nettoyé** : retire le préfixe/suffixe indiqué (ex. `Regarder maintenant `
+  et `site.com`) avant de nommer le dossier et les fichiers (option **15**).
+- **Journal sobre** : par défaut, seulement l'état de chaque épisode, le résultat
+  du téléchargement et les avertissements. Les détails techniques (clics Play,
+  candidats HLS, URLs) reviennent avec `--verbose` ou `verbose: true`.
 - **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique à un
   épisode déjà téléchargé (player bloqué), même après un redémarrage — l'empreinte
   est conservée dans `.progress.json`. La page est rechargée une fois avant de
@@ -195,6 +204,36 @@ Depuis cette version le remux est automatique après chaque téléchargement
 (`remux_mp4: true`), donc seuls les fichiers téléchargés avant ont besoin de ce
 passage. Menu interactif : option **10**.
 
+## Suivi hebdomadaire et reprise
+
+```powershell
+AnimeDL.bat --weekly            # derniers épisodes des séries suivies
+AnimeDL.bat --weekly --dry-run  # voir ce qui sortirait sans télécharger
+AnimeDL.bat --resume            # reprendre un téléchargement interrompu
+python app.py --weekly          # équivalent hors Windows
+```
+
+Dans le menu :
+
+| Option | Action |
+|---|---|
+| **11** | Ajouter une série à la liste de suivi (URL) |
+| **12** | Retirer une série de la liste (choix au numéro) |
+| **13** | Récupérer le dernier épisode de chaque série suivie |
+| **14** | Voir les séries interrompues et reprendre (choix au numéro) |
+| **15** | Définir le préfixe et le suffixe à retirer du titre |
+
+La liste est stockée dans `watchlist.json`, l'historique dans `sessions.json`
+(deux fichiers locaux non versionnés). Pour chaque série suivie, le script lit
+la page, repère le numéro le plus haut, vérifie si `S01E<NN>` existe déjà dans le
+dossier de sortie et, seulement dans ce cas, annonce « pas encore sorti ».
+Sinon il télécharge cet épisode avec les mêmes préférences (qualité, serveurs,
+navigateur, dossier).
+
+La reprise reconstruit les options enregistrées dans `sessions.json` et force
+`--retry-failed` : les épisodes déjà `done` restent ignorés, seuls les manquants
+et les échecs sont rejoués.
+
 ## Ligne de commande
 
 ```bash
@@ -220,6 +259,7 @@ python main.py "https://SITE/anime/ma-serie/" --limit 2       # tester 2 épisod
 | `--min-duration S` | Durée minimale d'un épisode valide (secondes) |
 | `--min-size-mb N` | Taille minimale d'un fichier valide (Mo) |
 | `--fresh-profile` | Repart d'un profil navigateur vierge (perte de session) |
+| `--verbose` | Affiche les détails techniques (désactivé par défaut) |
 
 Réparation des fichiers déjà téléchargés (voir
 [Réparation](#réparation-des-vidéos-existantes)) :
@@ -264,6 +304,9 @@ les surcharge. Les deux sont fusionnés au démarrage.
 | `display` | `window` | `window`, `hidden`, `headless` |
 | `sources` | `""` | `""` = tous, sinon `"1,2,4"` |
 | `quality` | `ask` | `ask`, `best`, `worst` ou une hauteur (`720`) |
+| `verbose` | `false` | `true` = messages développeur (clics, candidats HLS, URLs) |
+| `title_prefix` | `""` | Chaîne(s) à retirer au début du titre (`|` pour plusieurs) |
+| `title_suffix` | `""` | Chaîne(s) à retirer à la fin du titre (`|` pour plusieurs) |
 | `min_manifest_duration_s` | `60` | En dessous, le flux capté est considéré comme une pub |
 | `allow_unknown_duration` | `false` | Accepter un manifest sans durée lisible |
 | `stream_identity_check` | `true` | Refuser un épisode dont le flux est identique au précédent |
@@ -365,6 +408,9 @@ Une fois la capture faite, le téléchargement n'utilise plus le navigateur.
 └── .progress.json        # épisodes terminés, empreintes de flux, échecs, qualité choisie
 ```
 
+À la racine du projet (non versionnés) : `watchlist.json` (séries suivies),
+`sessions.json` (reprise), `user.yaml` (préférences du menu).
+
 En cas d'échec, `logs/` contient `fail-<épisode>-<date>.json` et un screenshot.
 `probe.py` y dépose ses propres rapports.
 
@@ -395,6 +441,7 @@ python _smoke/menu/run_argv.py             # saisie « URL + options » du menu,
 python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
 python _smoke/episodes/run_identity.py     # un épisode = un flux différent (+ empreintes persistées)
 python _smoke/mp4/run_mp4.py               # TS déguisé en .mp4 remuxé en MP4 indexé
+python _smoke/library/run_library.py       # titre nettoyé, suivi hebdo, reprise, verbose
 ```
 
 La CI (GitHub Actions) exécute la compilation et ces tests sur Ubuntu.
@@ -413,6 +460,7 @@ adblock.py         blocage publicitaire et neutralisation des popups
 downloader.py      yt-dlp + vérification ffmpeg
 progress.py        état .progress.json
 common.py          configuration, logs UTF-8, ffmpeg, navigateurs, disque
+library.py         suivi hebdo, reprise, watchlist/sessions.json
 update.py          mise à jour depuis GitHub (git pull ou archive zip)
 repair.py          remux des .mp4 existants (seek fluide)
 probe.py           diagnostic du player

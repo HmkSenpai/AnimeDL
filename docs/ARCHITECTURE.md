@@ -121,11 +121,40 @@ Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau 
 `.browser-profile` conserve cookies, session et éventuel challenge anti-bot.
 `--fresh-profile` le supprime, ce qui coûte une reconnexion mais repart propre.
 
+### Journal utilisateur vs développeur
+
+`common.log()` est le canal utilisateur (état des épisodes, succès, erreurs) ;
+`common.debug()` est muet sauf si `verbose: true`, `--verbose` ou
+`ANIMEDL_DEBUG=1`. Clics Play, popup fermée, sélection de serveur, candidats HLS
+et URLs complètes passent par `debug()`. `set_verbose()` est appelé au début de
+`main.run()` pour que la CLI et le menu se comportent pareil.
+
+### Suivi hebdomadaire et reprise
+
+`library.py` gère deux fichiers d'état globaux :
+
+- `watchlist.json` : paires `{url, name}` saisies au menu (options 11/12).
+  `run_latest()` ouvre chaque série avec `main.peek_series()` (navigation seule),
+  prend le numéro d'épisode le plus haut, regarde si `S01E<NN>` existe déjà dans
+  le dossier calculé depuis le titre nettoyé, puis télécharge uniquement cet
+  épisode avec `main.run()` — ou annonce « pas encore sorti ».
+- `sessions.json` : `main.run()` y enregistre l'URL, le titre, le dossier, le
+  chemin du `.progress.json`, les options utilisées et l'état. La reprise
+  (option 14) reconstruit un `argparse.Namespace` à partir de ces options, force
+  `retry_failed=True` et remet `from_ep/limit` à zéro : seuls les épisodes
+  manquants ou en échec sont rejoués.
+
+`scraper.clean_title()` applique `title_prefix` / `title_suffix` (chaînes ou
+listes séparées par `|`, comparaison insensible à la casse) avant tout calcul de
+dossier, dans `main.run()` comme dans `run_latest()`.
+
 ## Fichiers d'état
 
 | Fichier | Contenu |
 |---|---|
 | `.progress.json` | `done{code: {file, source, fingerprint}}`, `failed{code: raison}`, `quality` |
+| `watchlist.json` | séries suivies : `{entries: [{url, name}]}` |
+| `sessions.json` | état des séries lancées, options de relance, épisodes en échec |
 | `logs/fail-*.json` | URL visitées, requêtes `.m3u8`, erreurs, config utile |
 | `logs/fail-*.png` | capture d'écran au moment de l'échec |
 | `logs/probe-*.json/png` | rapport de `probe.py` |
