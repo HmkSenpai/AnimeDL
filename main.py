@@ -15,12 +15,13 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
 from adblock import AdBlocker
 from capture import ManifestCapture
-from content import same_content, visual_hash
+from content import same_content, stream_hash, visual_hash
 from common import (
     debug,
     die,
@@ -312,6 +313,40 @@ def run(args: argparse.Namespace) -> int:
                 elif cap:
                     if quality is None:
                         quality = choose_quality(cap, args, cfg, progress)
+
+                    # Contrôle VISUEL avant de télécharger : ffmpeg ne lit que
+                    # deux petits morceaux du flux HLS (quelques Mo, pas l'épisode).
+                    if identity_check and contents:
+                        headers = {
+                            "User-Agent": cap.user_agent or "",
+                            "Referer": cap.referer or "",
+                        }
+                        if cap.cookie:
+                            headers["Cookie"] = cap.cookie
+                        parsed_ref = urlparse(cap.referer or "")
+                        if parsed_ref.scheme and parsed_ref.netloc:
+                            headers["Origin"] = f"{parsed_ref.scheme}://{parsed_ref.netloc}"
+                        preview = stream_hash(
+                            cap.variant_url or cap.url, ffmpeg, cap.duration, headers
+                        )
+                        conflict = next(
+                            (
+                                code for known, code in contents.items()
+                                if known != ep.code and same_content(known, preview)
+                            ),
+                            None,
+                        )
+                        if conflict:
+                            last_error = f"contenu identique à E{conflict} (avant téléchargement)"
+                            log(f"[!] E{ep.code} : même vidéo que E{conflict} — téléchargement annulé")
+                            progress.mark_failed(ep.code, last_error)
+                            if not reload_done:
+                                reload_done = True
+                                capturer.forget_page()
+                                continue  # même source, page rechargée
+                            pos += 1
+                            continue
+
                     try:
                         final, duration = download(
                             cap.url,

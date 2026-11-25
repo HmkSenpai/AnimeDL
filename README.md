@@ -65,10 +65,12 @@ ignore les publicités et reprend là où il s'est arrêté.
 - **Journal sobre** : par défaut, seulement l'état de chaque épisode, le résultat
   du téléchargement et les avertissements. Les détails techniques (clics Play,
   candidats HLS, URLs) reviennent avec `--verbose` ou `verbose: true`.
-- **Garde-fou anti-doublon (double)** : refuse un épisode dont le flux est identique
-  à un épisode déjà téléchargé, puis compare les **pixels du fichier final** à
-  ceux des épisodes précédents — même si le CDN change de token, de dossier ou
-  de qualité, un épisode rejoué est supprimé et signalé.
+- **Garde-fou anti-doublon (double)** : avant de télécharger, compare quelques
+  segments du flux HLS avec les épisodes déjà reçus (moins de 1 Mo au lieu de
+  100-300 Mo) ; si c'est la même vidéo, le téléchargement est annulé. Un second
+  contrôle porte sur les pixels du fichier final, au cas où le flux aurait
+  changé entre les deux. Même avec un token, un dossier ou une qualité
+  différents, un épisode rejoué est détecté.
 - **Vérification du fichier final** : durée, taille, absence de `.part`.
 - **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
 - **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
@@ -455,7 +457,7 @@ python _smoke/menu/run_argv.py             # saisie « URL + options » du menu,
 python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
 python _smoke/episodes/run_identity.py     # un épisode = un flux différent (+ empreintes persistées)
 python _smoke/mp4/run_mp4.py               # TS déguisé en .mp4 remuxé en MP4 indexé
-python _smoke/content/run_content.py           # empreinte visuelle (réencodage vs autre épisode)
+python _smoke/content/run_content.py          # empreinte visuelle HLS (0,5 Mo) + fichier final
 python _smoke/library/run_library.py       # titre nettoyé, suivi hebdo, reprise, verbose
 ```
 

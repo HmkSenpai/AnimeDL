@@ -1,18 +1,21 @@
-"""Empreinte visuelle du fichier final : sécurité anti-doublon indépendante du flux.
+"""Empreinte visuelle indépendante du flux : anti-doublon avant et après téléchargement.
 
-Les URLs HLS peuvent changer de token, de dossier ou de variante d'une lecture à
-l'autre : l'empreinte du manifest peut donc rater un épisode rejoué. Ici on
-compare les **pixels réellement téléchargés** : deux images 32x32 en niveaux de
-gris, prélevées à 35 % et 75 % de la durée, comparées par distance de Hamming.
-La même vidéo réencodée dans une autre qualité reste très proche ; un autre
-épisode ne l'est pas.
+Deux images 32x32 en niveaux de gris, prélevées à 35 % et 75 % de la durée,
+comparées par distance de Hamming. La même vidéo réencodée dans une autre
+qualité reste très proche ; un autre épisode ne l'est pas.
 
-Coût : deux appels ffmpeg avec seek (~0,2 à 0,5 s par fichier).
+- `stream_hash()` lit directement le manifest HLS capté (quelques segments
+  seulement) : sert à refuser un épisode rejoué **avant** de télécharger.
+- `visual_hash()` lit le fichier final : filet de sécurité après téléchargement.
+
+Coût : deux appels ffmpeg avec seek (~0,2 à 0,8 s par source).
 """
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
+from typing import Mapping
 
 from common import ffmpeg_exe
 
@@ -20,11 +23,18 @@ _SIZE = 32                  # 32x32 pixels = 1024 bits par image
 _MAX_DIFF = 0.06            # 6 % de bits différents tolérés (réencodage)
 
 
-def _probe_duration(path: Path, ffmpeg: str) -> float | None:
-    import re
+def _header_args(headers: Mapping[str, str] | None) -> list[str]:
+    if not headers:
+        return []
+    text = "".join(f"{key}: {value}\r\n" for key, value in headers.items() if value)
+    return ["-headers", text] if text.strip() else []
 
-    proc = subprocess.run([ffmpeg, "-hide_banner", "-nostdin", "-i", str(path)],
-                          capture_output=True, text=True, errors="replace")
+
+def _probe_duration(source: str, ffmpeg: str, headers: Mapping[str, str] | None = None) -> float | None:
+    proc = subprocess.run(
+        [ffmpeg, "-hide_banner", "-nostdin", *_header_args(headers), "-i", source],
+        capture_output=True, text=True, errors="replace",
+    )
     match = re.search(r"Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)", proc.stderr)
     if not match:
         return None
@@ -32,13 +42,19 @@ def _probe_duration(path: Path, ffmpeg: str) -> float | None:
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
-def frame_hash(path: Path, ffmpeg: str, seconds: float) -> str | None:
-    """aHash d'une image 32x32 grise extraite à `seconds`."""
+def frame_hash(
+    source: str,
+    ffmpeg: str,
+    seconds: float,
+    headers: Mapping[str, str] | None = None,
+) -> str | None:
+    """aHash d'une image 32x32 grise extraite à `seconds` d'un fichier ou d'une URL."""
     proc = subprocess.run(
         [
             ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-            "-ss", f"{max(0.0, seconds):.3f}", "-i", str(path),
-            "-frames:v", "1",
+            *_header_args(headers),
+            "-ss", f"{max(0.0, seconds):.3f}", "-i", source,
+            "-map", "0:v:0", "-frames:v", "1",
             "-vf", f"scale={_SIZE}:{_SIZE}:flags=area,format=gray",
             "-pix_fmt", "gray", "-f", "rawvideo", "-",
         ],
@@ -55,20 +71,44 @@ def frame_hash(path: Path, ffmpeg: str, seconds: float) -> str | None:
     return format(int(bits, 2), f"0{_SIZE * _SIZE // 4}x")
 
 
-def visual_hash(path: Path, ffmpeg: str | None = None,
-                duration: float | None = None) -> str | None:
-    """Empreinte visuelle (2 images) d'un fichier vidéo, ou None si illisible."""
-    if not path.exists():
-        return None
+def _hash_source(
+    source: str,
+    ffmpeg: str | None,
+    duration: float | None,
+    headers: Mapping[str, str] | None,
+) -> str | None:
     exe = ffmpeg or ffmpeg_exe()
     if not duration:
-        duration = _probe_duration(path, exe)
-
+        duration = _probe_duration(source, exe, headers)
     stamps = (duration * 0.35, duration * 0.75) if duration and duration >= 4 else (1.0, 3.0)
-    hashes = [frame_hash(path, exe, seconds) for seconds in stamps]
+    hashes = [frame_hash(source, exe, seconds, headers) for seconds in stamps]
     if not all(hashes):
         return None
     return ":".join(hashes)  # type: ignore[arg-type]
+
+
+def visual_hash(path: Path, ffmpeg: str | None = None,
+                duration: float | None = None) -> str | None:
+    """Empreinte visuelle d'un fichier vidéo local, ou None si illisible."""
+    if not path.exists():
+        return None
+    return _hash_source(str(path), ffmpeg, duration, None)
+
+
+def stream_hash(
+    url: str,
+    ffmpeg: str | None = None,
+    duration: float | None = None,
+    headers: Mapping[str, str] | None = None,
+) -> str | None:
+    """Empreinte visuelle d'un manifest HLS, sans télécharger l'épisode entier.
+
+    ffmpeg ne récupère que les segments autour des deux instants demandés
+    (quelques Mo au plus), avec les en-têtes du navigateur capturés.
+    """
+    if not url:
+        return None
+    return _hash_source(url, ffmpeg, duration, headers)
 
 
 def same_content(first: str | None, second: str | None, max_diff: float = _MAX_DIFF) -> bool:

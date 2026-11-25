@@ -4,18 +4,47 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import threading
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from common import ffmpeg_exe, log  # noqa: E402
-from content import same_content, visual_hash  # noqa: E402
+from content import same_content, stream_hash, visual_hash  # noqa: E402
 from progress import Progress  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 WORK = HERE / ".work"
 FF = ffmpeg_exe()
+
+
+class CountingHandler(SimpleHTTPRequestHandler):
+    total = 0
+
+    def log_message(self, *args):  # silence
+        pass
+
+    def do_GET(self):  # noqa: N802
+        local = WORK / urlparse(self.path).path.lstrip("/")
+        if local.is_file():
+            type(self).total += local.stat().st_size
+        super().do_GET()
+
+
+def build_hls(video: Path, name: str) -> Path:
+    playlist = WORK / "hls" / f"{name}.m3u8"
+    playlist.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [FF, "-hide_banner", "-loglevel", "error", "-y", "-i", str(video),
+         "-c", "copy", "-f", "hls", "-hls_time", "2", "-hls_list_size", "0",
+         "-hls_segment_filename", str(playlist.parent / f"{name}_%03d.ts"),
+         str(playlist)], check=True,
+    )
+    return playlist
 
 
 def make(name: str, source: str, extra: list[str] | None = None) -> Path:
@@ -54,6 +83,25 @@ def main() -> int:
         (not same_content(ha, hb), "deux vidéos différentes = différentes"),
         (not same_content(ha, None), "empreinte absente = pas de correspondance"),
         (visual_hash(WORK / "inexistant.mp4", FF) is None, "fichier absent -> None"),
+    ]
+
+    # contrôle AVANT téléchargement : empreinte lue directement depuis le HLS
+    pa = build_hls(a, "a")
+    pb = build_hls(b, "b")
+    httpd = ThreadingHTTPServer(
+        ("127.0.0.1", 0), partial(CountingHandler, directory=str(WORK))
+    )
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    port = httpd.server_address[1]
+    CountingHandler.total = 0
+    sa = stream_hash(f"http://127.0.0.1:{port}/hls/{pa.name}", FF, 8)
+    sb = stream_hash(f"http://127.0.0.1:{port}/hls/{pb.name}", FF, 8)
+    fetched = CountingHandler.total
+    httpd.shutdown()
+    checks += [
+        (same_content(sa, ha), "stream_hash HLS = empreinte du fichier final"),
+        (not same_content(sa, hb), "stream HLS A différent du fichier B"),
+        (fetched < 8 * 1024 * 1024, f"prélèvement < 8 Mo ({fetched / 1048576:.2f} Mo)"),
     ]
 
     state = WORK / ".progress.json"
