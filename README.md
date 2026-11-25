@@ -56,12 +56,12 @@ ignore les publicités et reprend là où il s'est arrêté.
   3-5 s à chaque déplacement dans la timeline.
 - **Reprise** : `.progress.json` saute les épisodes déjà terminés ; `--retry-failed`
   rejoue les échecs. Les séries interrompues sont aussi listées dans `sessions.json`
-  (option **14** du menu) pour reprendre sans retaper l'URL ni les options.
-- **Suivi hebdomadaire** : une liste de séries (option **11**) et une touche
-  (option **13**) ne récupère que le **dernier épisode** de chacune ; un épisode
-  déjà présent est annoncé « pas encore sorti ».
+  (option **12** du menu) pour reprendre sans retaper l'URL ni les options.
+- **Suivi hebdomadaire** : une watchlist (option **11**, sous-menu) et une touche
+  pour ne récupérer que le **dernier épisode** de chaque série ; un épisode déjà
+  présent est annoncé « pas encore sorti ».
 - **Titre nettoyé** : retire le préfixe/suffixe indiqué (ex. `Regarder maintenant `
-  et `site.com`) avant de nommer le dossier et les fichiers (option **15**).
+  et `site.com`) avant de nommer le dossier et les fichiers (option **13**).
 - **Journal sobre** : par défaut, seulement l'état de chaque épisode, le résultat
   du téléchargement et les avertissements. Les détails techniques (clics Play,
   candidats HLS, URLs) reviennent avec `--verbose` ou `verbose: true`.
@@ -217,11 +217,25 @@ Dans le menu :
 
 | Option | Action |
 |---|---|
-| **11** | Ajouter une série à la liste de suivi (URL) |
-| **12** | Retirer une série de la liste (choix au numéro) |
-| **13** | Récupérer le dernier épisode de chaque série suivie |
-| **14** | Voir les séries interrompues et reprendre (choix au numéro) |
-| **15** | Définir le préfixe et le suffixe à retirer du titre |
+| **11** | Ouvrir la **watchlist** (liste des séries suivies) |
+| **12** | Voir les séries interrompues et reprendre (choix au numéro) |
+| **13** | Définir le préfixe et le suffixe à retirer du titre |
+
+Le sous-menu **11** affiche d'abord les séries suivies, numérotées avec leur
+nom et leur URL, puis propose :
+
+```
+  1) Ajouter une série
+  2) Retirer une série (numéro)
+  3) Télécharger les derniers épisodes
+  4) Simulation (voir sans télécharger)
+  0) Retour au menu principal
+```
+
+À l'ajout, un nom lisible est proposé automatiquement à partir du slug de l'URL
+(`nia-liston-the-merciless-maiden` → `Nia Liston The Merciless Maiden`) ; tu peux
+le remplacer. Le choix **3** lance le téléchargement pour toute la liste, le
+**4** fait la même chose sans rien télécharger.
 
 La liste est stockée dans `watchlist.json`, l'historique dans `sessions.json`
 (deux fichiers locaux non versionnés). Pour chaque série suivie, le script lit

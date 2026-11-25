@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 import shlex
 import sys
+from pathlib import Path
 
 from common import USER_PREFS_PATH, load_config, log, resolve_browser, resolve_path, save_user_prefs
 from main import build_parser, run
@@ -144,6 +145,63 @@ def run_download(raw: str, dry_run: bool = False) -> None:
     run(args)
 
 
+def watchlist_menu(cfg: dict, path: Path | None = None) -> None:
+    """Sous-menu watchlist : voir les séries suivies, ajouter, retirer, lancer."""
+    from library import (
+        WATCHLIST_PATH,
+        ask_index,
+        load_watchlist,
+        run_latest,
+        suggest_name,
+        watch_add,
+        watch_remove,
+    )
+
+    target = path or WATCHLIST_PATH
+    while True:
+        entries = load_watchlist(target)
+        log("\n  ================ WATCHLIST ================")
+        if not entries:
+            log("  Aucune série suivie pour le moment.")
+        for index, entry in enumerate(entries, 1):
+            log(f"  {index}) {entry.get('name') or suggest_name(entry['url'])}")
+            log(f"       {entry['url']}")
+        log("  " + "-" * 52)
+        log(
+            "  1) Ajouter une série\n"
+            "  2) Retirer une série (numéro)\n"
+            "  3) Télécharger les derniers épisodes\n"
+            "  4) Simulation (voir sans télécharger)\n"
+            "  0) Retour au menu principal"
+        )
+
+        choice = ask("\n  Votre choix").strip().lower()
+        if choice in ("0", "q", "retour", "back"):
+            return
+        if choice == "1":
+            url = ask("  URL de la série")
+            if not url:
+                continue
+            name = ask("  Nom affiché", suggest_name(url))
+            log("  " + watch_add(url, name, target))
+        elif choice == "2":
+            if not entries:
+                log("  Liste vide.")
+            else:
+                index = ask_index("  Numéro à retirer (q = annuler) : ", len(entries))
+                if index:
+                    log("  " + watch_remove(index, target))
+        elif choice in ("3", "4"):
+            try:
+                log("")
+                run_latest(cfg, dry_run=(choice == "4"), path=target)
+            except Exception as exc:
+                log(f"  Suivi hebdo impossible : {type(exc).__name__}: {exc}")
+        else:
+            log("  Choix invalide.")
+        print()
+
+
 def main() -> int:
     if "--verbose" in sys.argv[1:]:
         from common import set_verbose
@@ -187,11 +245,9 @@ def main() -> int:
             "  8) Réinitialiser les préférences\n"
             "  9) Mettre à jour depuis GitHub\n"
             " 10) Réparer les vidéos existantes (seek fluide)\n"
-            " 11) Suivi hebdo : ajouter une série\n"
-            " 12) Suivi hebdo : retirer une série\n"
-            " 13) Suivi hebdo : récupérer les derniers épisodes\n"
-            " 14) Reprendre un téléchargement interrompu\n"
-            " 15) Nettoyer le titre (préfixe / suffixe)\n"
+            " 11) Suivi hebdomadaire (watchlist)\n"
+            " 12) Reprendre un téléchargement interrompu\n"
+            " 13) Nettoyer le titre (préfixe / suffixe)\n"
             "  0) Quitter"
         )
         choice = ask("\n  Votre choix")
@@ -335,37 +391,10 @@ def main() -> int:
             except Exception as exc:
                 log(f"  Réparation impossible : {type(exc).__name__}: {exc}")
 
-        elif choice in ("11", "watch-add"):
-            url = ask("  URL de la série à suivre")
-            if url:
-                from library import watch_add
+        elif choice in ("11", "watch", "watchlist", "weekly"):
+            watchlist_menu(cfg)
 
-                log("  " + watch_add(url))
-
-        elif choice in ("12", "watch-remove"):
-            from library import ask_index, load_watchlist, watch_remove
-
-            entries = load_watchlist()
-            if not entries:
-                log("  Liste vide.")
-            else:
-                for i, entry in enumerate(entries, 1):
-                    log(f"  {i}) {entry.get('name') or entry['url']}")
-                index = ask_index("  Numéro à retirer (q = annuler) : ", len(entries))
-                if index:
-                    log("  " + watch_remove(index))
-
-        elif choice in ("13", "weekly"):
-            from library import run_latest
-
-            dry = ask("  Simulation seulement ? (o/N)", "N").strip().lower().startswith("o")
-            try:
-                log("")
-                run_latest(cfg, dry_run=dry)
-            except Exception as exc:
-                log(f"  Suivi hebdo impossible : {type(exc).__name__}: {exc}")
-
-        elif choice in ("14", "resume"):
+        elif choice in ("12", "resume"):
             from library import run_resume
 
             try:
@@ -374,7 +403,7 @@ def main() -> int:
             except Exception as exc:
                 log(f"  Reprise impossible : {type(exc).__name__}: {exc}")
 
-        elif choice == "15":
+        elif choice == "13":
             prefix = ask("  Préfixe à retirer (vide = aucun)", str(cfg.get("title_prefix", "")))
             suffix = ask("  Suffixe à retirer (vide = aucun)", str(cfg.get("title_suffix", "")))
             save_user_prefs({"title_prefix": prefix, "title_suffix": suffix})

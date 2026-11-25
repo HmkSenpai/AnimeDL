@@ -1,14 +1,21 @@
 """Test : saisie « URL + options » collée dans le menu."""
 from __future__ import annotations
 
+import builtins
+import contextlib
+import io
+import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from app import build_argv, resolve_choice, split_input  # noqa: E402
+from app import build_argv, resolve_choice, split_input, watchlist_menu  # noqa: E402
 from common import log  # noqa: E402
+import library  # noqa: E402
+from library import load_watchlist, watch_add  # noqa: E402
 from main import build_parser  # noqa: E402
 
 CFG = {"sources": "", "display": "window"}
@@ -65,6 +72,55 @@ CASES = [
 ]
 
 
+def check_watchlist_menu() -> list[tuple[bool, str]]:
+    """Le sous-menu affiche les séries suivies et distribue les actions."""
+    import app
+
+    work = HERE / ".work"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    target = work / "watchlist.json"
+    watch_add("https://site.test/anime/serie-alpha/", "Série Alpha", target)
+    watch_add("https://site.test/anime/serie-beta/", "Série Beta", target)
+
+    original_ask, original_run, original_input = app.ask, library.run_latest, builtins.input
+    checks: list[tuple[bool, str]] = []
+    try:
+        answers = iter(["4", "0"])
+        app.ask = lambda prompt, default="": next(answers, "") or default
+        calls: list[tuple[bool, Path]] = []
+        library.run_latest = lambda cfg, dry_run=False, path=None: (calls.append((dry_run, path)), 0)[1]
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            watchlist_menu({}, target)
+        text = buf.getvalue()
+        checks += [
+            ("WATCHLIST" in text and "1) Série Alpha" in text and "2) Série Beta" in text,
+             "watchlist : noms des séries affichés"),
+            (calls == [(True, target)], "watchlist : simulation lancée depuis le sous-menu"),
+        ]
+
+        answers = iter(["1", "https://site.test/anime/nouvelle-serie/", "", "0"])
+        app.ask = lambda prompt, default="": next(answers, "") or default
+        with contextlib.redirect_stdout(io.StringIO()):
+            watchlist_menu({}, target)
+        entries = load_watchlist(target)
+        checks.append((len(entries) == 3 and entries[-1]["name"] == "Nouvelle Serie",
+                       "watchlist : ajout avec nom suggéré"))
+
+        answers = iter(["2", "0"])
+        app.ask = lambda prompt, default="": next(answers, "") or default
+        builtins.input = lambda prompt="": "2"
+        with contextlib.redirect_stdout(io.StringIO()):
+            watchlist_menu({}, target)
+        checks.append(([e["name"] for e in load_watchlist(target)] == ["Série Alpha", "Nouvelle Serie"],
+                       "watchlist : retrait au numéro"))
+    finally:
+        app.ask, library.run_latest, builtins.input = original_ask, original_run, original_input
+        shutil.rmtree(work, ignore_errors=True)
+    return checks
+
+
 def main() -> int:
     checks: list[tuple[bool, str]] = []
 
@@ -88,6 +144,7 @@ def main() -> int:
         (resolve_choice("best", options) == "best", "menu : valeur exacte acceptée"),
         (resolve_choice("nimporte quoi", options) is None, "menu : texte libre refusé"),
     ]
+    checks += check_watchlist_menu()
 
     for ok, label in checks:
         log(("  ✅ " if ok else "  ❌ ") + label)

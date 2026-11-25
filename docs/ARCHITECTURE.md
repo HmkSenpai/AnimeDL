@@ -133,14 +133,14 @@ et URLs complètes passent par `debug()`. `set_verbose()` est appelé au début 
 
 `library.py` gère deux fichiers d'état globaux :
 
-- `watchlist.json` : paires `{url, name}` saisies au menu (options 11/12).
+- `watchlist.json` : paires `{url, name}` gérées dans le sous-menu **11** ;
   `run_latest()` ouvre chaque série avec `main.peek_series()` (navigation seule),
   prend le numéro d'épisode le plus haut, regarde si `S01E<NN>` existe déjà dans
   le dossier calculé depuis le titre nettoyé, puis télécharge uniquement cet
   épisode avec `main.run()` — ou annonce « pas encore sorti ».
 - `sessions.json` : `main.run()` y enregistre l'URL, le titre, le dossier, le
   chemin du `.progress.json`, les options utilisées et l'état. La reprise
-  (option 14) reconstruit un `argparse.Namespace` à partir de ces options, force
+  (option 12) reconstruit un `argparse.Namespace` à partir de ces options, force
   `retry_failed=True` et remet `from_ep/limit` à zéro : seuls les épisodes
   manquants ou en échec sont rejoués.
 

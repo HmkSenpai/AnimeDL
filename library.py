@@ -130,6 +130,13 @@ def title_from_url(url: str) -> str:
     return parts[-1] if parts else url
 
 
+def suggest_name(url: str) -> str:
+    """Nom lisible proposé quand on ajoute une série à la watchlist."""
+    slug = re.sub(r"-\d+-(?:vostfr|vf)/?$", "", title_from_url(url), flags=re.I)
+    words = [w for w in re.split(r"[-_]+", slug) if w]
+    return " ".join(w[:1].upper() + w[1:] for w in words)
+
+
 def session_unfinished(path: Path = SESSIONS_PATH) -> list[dict[str, Any]]:
     pending = [e for e in load_sessions(path).values() if e.get("status") in FAILED_STATUSES]
     return sorted(pending, key=lambda e: str(e.get("updated", "")), reverse=True)
