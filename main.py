@@ -14,11 +14,13 @@ import re
 import shutil
 import sys
 import time
+from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
 from adblock import AdBlocker
 from capture import ManifestCapture
+from content import same_content, visual_hash
 from common import (
     debug,
     die,
@@ -178,7 +180,7 @@ def run(args: argparse.Namespace) -> int:
         cfg["min_duration_s"] = args.min_duration
     if args.min_size_mb is not None:
         cfg["min_size_mb"] = args.min_size_mb
-    ffmpeg_exe()  # échoue tôt si absent
+    ffmpeg = ffmpeg_exe()  # échoue tôt si absent
 
     pattern = re.compile(cfg["episode_pattern"])
     sources_order = [int(x) - 1 for x in re.findall(r"\d+", args.sources)] or None
@@ -245,6 +247,25 @@ def run(args: argparse.Namespace) -> int:
         streams: dict[str, str] = progress.stream_map()
         identity_check = bool(cfg.get("stream_identity_check", True))
 
+        # 2e garde-fou : comparer les pixels du fichier final. L'empreinte du
+        # manifest peut rater un rejeu si le CDN change de token/de dossier.
+        contents: dict[str, str] = progress.content_map()
+        if identity_check:
+            rebuilt = False
+            for code, entry in list(progress.data["episodes"].items()):
+                if entry.get("status") != "done" or entry.get("content_hash"):
+                    continue
+                stored = entry.get("file")
+                if not stored or not Path(stored).exists():
+                    continue
+                visual = visual_hash(Path(stored), ffmpeg)
+                if visual:
+                    entry["content_hash"] = visual
+                    contents[visual] = code
+                    rebuilt = True
+            if rebuilt:
+                progress.save()
+
         for ep in episodes:
             if progress.is_done(ep.code):
                 log(f"[E{ep.code}] déjà présent — ignoré")
@@ -304,12 +325,36 @@ def run(args: argparse.Namespace) -> int:
                             quality=quality,
                         )
                         verify(final, duration, cfg, expected=cap.duration)
-                        progress.mark_done(ep.code, final, source_index, cap.fingerprint)
-                        results.append((ep.code, str(final)))
-                        if cap.fingerprint:
-                            streams[cap.fingerprint] = ep.code
-                        ok = True
-                        break
+                        visual = visual_hash(final, ffmpeg, duration) if identity_check else None
+                        conflict = None
+                        if visual:
+                            conflict = next(
+                                (
+                                    known_code
+                                    for known, known_code in contents.items()
+                                    if known_code != ep.code and same_content(known, visual)
+                                ),
+                                None,
+                            )
+                        if conflict:
+                            last_error = f"contenu identique à E{conflict}"
+                            log(f"[!] E{ep.code} : contenu identique à E{conflict} — fichier supprimé")
+                            final.unlink(missing_ok=True)
+                            cleanup_failed(out_template)
+                            progress.mark_failed(ep.code, last_error)
+                            if not reload_done:
+                                reload_done = True
+                                capturer.forget_page()
+                                continue  # même source, page rechargée
+                        else:
+                            progress.mark_done(ep.code, final, source_index, cap.fingerprint, visual or "")
+                            results.append((ep.code, str(final)))
+                            if cap.fingerprint:
+                                streams[cap.fingerprint] = ep.code
+                            if visual:
+                                contents[visual] = ep.code
+                            ok = True
+                            break
                     except DownloadError as exc:
                         last_error = str(exc)
                         log(f"[dl] échec source #{source_index + 1} : {exc}")

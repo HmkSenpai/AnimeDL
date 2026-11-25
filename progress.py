@@ -27,7 +27,14 @@ class Progress:
     def is_done(self, code: str) -> bool:
         return self.status(code).get("status") == "done"
 
-    def mark_done(self, code: str, file: Path, source_index: int, fingerprint: str = "") -> None:
+    def mark_done(
+        self,
+        code: str,
+        file: Path,
+        source_index: int,
+        fingerprint: str = "",
+        content_hash: str = "",
+    ) -> None:
         entry: dict[str, Any] = {
             "status": "done",
             "file": str(file),
@@ -35,6 +42,8 @@ class Progress:
         }
         if fingerprint:
             entry["fingerprint"] = fingerprint
+        if content_hash:
+            entry["content_hash"] = content_hash
         self.data["episodes"][code] = entry
         self.save()
 
@@ -49,6 +58,15 @@ class Progress:
             fingerprint = entry.get("fingerprint")
             if entry.get("status") == "done" and fingerprint:
                 out[str(fingerprint)] = code
+        return out
+
+    def content_map(self) -> dict[str, str]:
+        """Empreinte visuelle -> épisode, pour les épisodes déjà terminés."""
+        out: dict[str, str] = {}
+        for code, entry in self.data["episodes"].items():
+            content_hash = entry.get("content_hash")
+            if entry.get("status") == "done" and content_hash:
+                out[str(content_hash)] = code
         return out
 
     def mark_failed(self, code: str, error: str) -> None:

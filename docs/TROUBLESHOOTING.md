@@ -24,8 +24,8 @@ En cas d'échec de capture, `main.py` produit de son côté
 | popups à répétition | régie non listée | ajouter ses domaines dans `ad_hosts`, ou utiliser Brave |
 | page « Checking your browser » | protection anti-bot | mode `hidden` plutôt que `headless`, ou navigateur réel (`--browser chrome`) |
 | qualité toujours la même | choix mémorisé | supprimer `.progress.json` du dossier série, ou `--quality 1080` |
-| **É02 contient É01** (image identique, autre qualité) | le player n'a pas changé d'épisode, ou la page a redirigé | le script recharge la page une fois puis refuse le cas (`stream_identity_check`, empreinte enregistrée dans `.progress.json`) ; lancer `probe.py` sur É02 et vérifier que l'iframe change bien de `src` |
-| ancien doublon toujours accepté | `.progress.json` date d'avant l'empreinte persistée : les épisodes déjà `done` n'ont pas de `fingerprint` | `--redo` sur le mauvais épisode (il sera retéléchargé avec son empreinte), puis relancer |
+| **É02 contient É01** (image identique, autre qualité) | le player n'a pas changé d'épisode, ou la page a redirigé | le script recharge la page puis refuse le cas (empreinte du flux **et** comparaison des pixels du fichier via `content.py`) |
+| ancien doublon toujours accepté | `.progress.json` date d'avant les empreintes : les épisodes `done` n'ont pas de `content_hash` | l'empreinte visuelle est calculée automatiquement au démarrage pour ces épisodes ; pour un fichier déjà faux, `--redo N` le supprime puis le retélécharge |
 | deux épisodes réellement identiques (spécial, recap) bloqués | le garde-fou les voit comme un doublon | mettre `stream_identity_check: false` dans `user.yaml` (ou `config.yaml`) le temps de ces épisodes |
 | fichier E02 déjà mauvais | épisode marqué `done` dans `.progress.json` | `python main.py "<url>" --redo 2` (supprime le fichier et l'entrée) |
 | **qualité `worst` mais fichier énorme (600 Mo)** | le player avait demandé directement une sous-playlist (`index-v1-a1.m3u8`), donc aucun choix possible | corrigé : le master est préféré ; vérifier le log `[hls] master retenu` avec `--verbose` et la résolution affichée par `[dl] OK … , 640x360` |

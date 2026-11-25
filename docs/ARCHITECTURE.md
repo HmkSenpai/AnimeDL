@@ -97,7 +97,8 @@ Sans master, le flux unique est utilisé et un avertissement est loggé.
 
 ### Un épisode = un flux
 
-Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau nom :
+Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau nom,
+plus un troisième qui ne regarde plus l'URL mais le contenu :
 
 1. **Identité de page** — `_canonical()` compare chemin **et query** : un site
    qui change d'épisode via `?ep=2` déclenche bien une navigation (avant, la
@@ -115,6 +116,14 @@ Deux garde-fous empêchent d'enregistrer l'épisode précédent sous un nouveau 
 3. **Vérification d'atterrissage** — après navigation, si l'URL finale désigne
    un autre numéro d'épisode (redirection), la capture est annulée au lieu de
    télécharger la mauvaise page.
+4. **Identité visuelle (filet de sécurité)** — `content.visual_hash()` extrait
+   deux images 32x32 en gris à 35 % et 75 % de la durée du **fichier final** et
+   les compare à ceux des épisodes déjà faits (`same_content()`, distance de
+   Hamming ≤ 6 %). Un même épisode réencodé reste à ~0,2 % ; un autre épisode à
+   ~60 %. Contrairement à l'empreinte du manifest, ça ne dépend ni du token ni
+   du chemin CDN : si ça correspond, le fichier est supprimé, l'épisode marqué
+   en échec et la page rechargée pour réessayer. Les épisodes anciens sans
+   `content_hash` sont hashés au démarrage (une fois) pour compléter la couverture.
 
 ### Profil persistant
 
@@ -152,7 +161,7 @@ dossier, dans `main.run()` comme dans `run_latest()`.
 
 | Fichier | Contenu |
 |---|---|
-| `.progress.json` | `done{code: {file, source, fingerprint}}`, `failed{code: raison}`, `quality` |
+| `.progress.json` | `done{code: {file, source, fingerprint, content_hash}}`, `failed{code: raison}`, `quality` |
 | `watchlist.json` | séries suivies : `{entries: [{url, name}]}` |
 | `sessions.json` | état des séries lancées, options de relance, épisodes en échec |
 | `logs/fail-*.json` | URL visitées, requêtes `.m3u8`, erreurs, config utile |

@@ -65,10 +65,10 @@ ignore les publicités et reprend là où il s'est arrêté.
 - **Journal sobre** : par défaut, seulement l'état de chaque épisode, le résultat
   du téléchargement et les avertissements. Les détails techniques (clics Play,
   candidats HLS, URLs) reviennent avec `--verbose` ou `verbose: true`.
-- **Garde-fou anti-doublon** : refuse un épisode dont le flux est identique à un
-  épisode déjà téléchargé (player bloqué), même après un redémarrage — l'empreinte
-  est conservée dans `.progress.json`. La page est rechargée une fois avant de
-  déclarer l'échec, ce qui débloque souvent le player.
+- **Garde-fou anti-doublon (double)** : refuse un épisode dont le flux est identique
+  à un épisode déjà téléchargé, puis compare les **pixels du fichier final** à
+  ceux des épisodes précédents — même si le CDN change de token, de dossier ou
+  de qualité, un épisode rejoué est supprimé et signalé.
 - **Vérification du fichier final** : durée, taille, absence de `.part`.
 - **Menu interactif** (`AnimeDL.bat`) ou CLI complète.
 - **Aucun ffmpeg à installer** : `imageio-ffmpeg` embarque le binaire.
@@ -455,6 +455,7 @@ python _smoke/menu/run_argv.py             # saisie « URL + options » du menu,
 python _smoke/master/run_master.py         # master (multi-qualités) préféré au flux du player
 python _smoke/episodes/run_identity.py     # un épisode = un flux différent (+ empreintes persistées)
 python _smoke/mp4/run_mp4.py               # TS déguisé en .mp4 remuxé en MP4 indexé
+python _smoke/content/run_content.py           # empreinte visuelle (réencodage vs autre épisode)
 python _smoke/library/run_library.py       # titre nettoyé, suivi hebdo, reprise, verbose
 ```
 
@@ -469,6 +470,7 @@ app.py             menu interactif
 main.py            orchestrateur (CLI, boucle, serveurs, reprise)
 scraper.py         extraction de la liste des épisodes
 capture.py         Playwright : Play, serveurs, interception du manifest
+content.py         empreinte visuelle des fichiers (anti-doublon final)
 hls.py             validation du manifest et extraction des variantes
 adblock.py         blocage publicitaire et neutralisation des popups
 downloader.py      yt-dlp + vérification ffmpeg
